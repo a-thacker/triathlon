@@ -141,18 +141,30 @@ async function fetchFinal() {
 
 // ── Result card image generator ───────────────────────────────
 
-function downloadResultCard(row, raceType) {
+function ordinal(n) {
+  if (n === 1) return '1st'
+  if (n === 2) return '2nd'
+  if (n === 3) return '3rd'
+  return `${n}th`
+}
+
+function downloadResultCard(row, raceType, placements = []) {
   const canvas = document.createElement('canvas')
-  const W = 800, H = raceType === 'adult' && !row.isTeam ? 420 : 320
+  const showSplits = raceType === 'adult'
+  const W = 800
+  // Height: base + splits row + placements row if any
+  const placementH = placements.length > 0 ? 36 : 0
+  const H = showSplits ? 420 + placementH : 320 + placementH
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')
+
+  const accent = raceType === 'kids' ? '#ffd32a' : '#00d4ff'
 
   // Background
   ctx.fillStyle = '#0f1117'
   ctx.fillRect(0, 0, W, H)
 
   // Accent bar
-  const accent = raceType === 'kids' ? '#ffd32a' : '#00d4ff'
   ctx.fillStyle = accent
   ctx.fillRect(0, 0, 6, H)
 
@@ -160,7 +172,6 @@ function downloadResultCard(row, raceType) {
   ctx.fillStyle = accent
   ctx.font = 'bold 22px system-ui, sans-serif'
   ctx.fillText('TriTimer — Lawroweld 2026', 32, 44)
-
   ctx.fillStyle = '#8892b0'
   ctx.font = '15px system-ui, sans-serif'
   ctx.fillText(raceType === 'kids' ? 'Kids Race' : 'Adult Race', 32, 68)
@@ -169,10 +180,29 @@ function downloadResultCard(row, raceType) {
   ctx.fillStyle = '#2e3250'
   ctx.fillRect(32, 82, W - 64, 1)
 
+  // Placement badges (top right)
+  if (placements.length > 0) {
+    const medalColors = { '1st': '#FFD700', '2nd': '#C0C0C0', '3rd': '#CD7F32' }
+    let bx = W - 32
+    placements.slice().reverse().forEach(p => {
+      const rank = p.split(' ')[0]
+      const bg = medalColors[rank] || '#2e3250'
+      const tw = ctx.measureText(p).width + 20
+      bx -= tw + 8
+      ctx.fillStyle = bg
+      ctx.beginPath()
+      ctx.roundRect(bx, 20, tw + 8, 26, 6)
+      ctx.fill()
+      ctx.fillStyle = '#111'
+      ctx.font = 'bold 13px system-ui, sans-serif'
+      ctx.fillText(p, bx + 10, 37)
+    })
+  }
+
   // Name
   ctx.fillStyle = '#f0f2ff'
   ctx.font = 'bold 32px system-ui, sans-serif'
-  const displayName = row.isTeam ? row.name : row.name
+  const displayName = row.name
   ctx.fillText(displayName, 32, 124)
 
   if (row.isTeam && row.subName) {
@@ -185,19 +215,20 @@ function downloadResultCard(row, raceType) {
   ctx.fillStyle = accent
   ctx.font = 'bold 18px system-ui, sans-serif'
   const numLabel = row.isTeam ? row.raceNumbers : `#${row.raceNumber}`
-  ctx.fillText(numLabel, 32, row.isTeam && row.subName ? 178 : 158)
+  const numY = row.isTeam && row.subName ? 178 : 158
+  ctx.fillText(numLabel, 32, numY)
 
-  // Total time — big
+  // Total time
+  const timeY = row.isTeam ? 240 : 220
   ctx.fillStyle = accent
   ctx.font = 'bold 52px monospace'
-  ctx.fillText(formatDuration(row.totalMs), 32, row.isTeam ? 240 : 220)
-
+  ctx.fillText(formatDuration(row.totalMs), 32, timeY)
   ctx.fillStyle = '#8892b0'
   ctx.font = '14px system-ui, sans-serif'
-  ctx.fillText('Total Time', 32, row.isTeam ? 262 : 242)
+  ctx.fillText('Total Time', 32, timeY + 22)
 
-  // Splits (adult only)
-  if (raceType === 'adult' && !row.isTeam) {
+  // Splits — shown for ALL adult entries including teams
+  if (showSplits) {
     const splits = [
       { label: 'Swim', val: row.swimMs },
       { label: 'T1',   val: row.t1Ms   },
@@ -205,19 +236,20 @@ function downloadResultCard(row, raceType) {
       { label: 'T2',   val: row.t2Ms   },
       { label: 'Run',  val: row.runMs  },
     ]
+    const splitY = timeY + 42
     const colW = (W - 64) / splits.length
     splits.forEach((s, i) => {
       const x = 32 + i * colW
       ctx.fillStyle = '#22263a'
       ctx.beginPath()
-      ctx.roundRect(x, 270, colW - 8, 60, 6)
+      ctx.roundRect(x, splitY, colW - 8, 60, 6)
       ctx.fill()
       ctx.fillStyle = '#8892b0'
       ctx.font = 'bold 11px system-ui, sans-serif'
-      ctx.fillText(s.label.toUpperCase(), x + 10, 291)
+      ctx.fillText(s.label.toUpperCase(), x + 10, splitY + 18)
       ctx.fillStyle = '#f0f2ff'
       ctx.font = 'bold 15px monospace'
-      ctx.fillText(formatDuration(s.val), x + 10, 315)
+      ctx.fillText(formatDuration(s.val), x + 10, splitY + 42)
     })
   }
 
@@ -266,7 +298,30 @@ function SaveButton({ onClick }) {
   )
 }
 
-function KidsResultCard({ rank, row }) {
+// Compute placement strings for a row given all result sets
+function computePlacements(row, raceType, allKids, allAdultInd, allTeams) {
+  const badges = []
+  if (raceType === 'kids') {
+    const rank = allKids.findIndex(r => r.id === row.id) + 1
+    if (rank >= 1 && rank <= 3) badges.push(`${ordinal(rank)} Overall`)
+    return badges
+  }
+  if (row.isTeam) {
+    const rank = allTeams.findIndex(r => r.id === row.id) + 1
+    if (rank >= 1 && rank <= 3) badges.push(`${ordinal(rank)} Team`)
+    return badges
+  }
+  // Individual adult
+  const overallRank = allAdultInd.findIndex(r => r.id === row.id) + 1
+  if (overallRank >= 1 && overallRank <= 3) badges.push(`${ordinal(overallRank)} Overall`)
+  const genderList = allAdultInd.filter(r => r.gender === row.gender)
+  const genderRank = genderList.findIndex(r => r.id === row.id) + 1
+  const gLabel = row.gender === 'male' ? 'Men' : row.gender === 'female' ? 'Women' : row.gender
+  if (genderRank >= 1 && genderRank <= 3) badges.push(`${ordinal(genderRank)} ${gLabel}`)
+  return badges
+}
+
+function KidsResultCard({ rank, row, placements = [] }) {
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -281,17 +336,30 @@ function KidsResultCard({ rank, row }) {
           <div style={{ color: 'var(--muted)', fontSize: '0.78rem', marginTop: 2 }}>
             #{row.raceNumber} · Age {row.age} · {row.gender}
           </div>
+          {placements.length > 0 && (
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+              {placements.map(p => (
+                <span key={p} style={{
+                  background: p.startsWith('1st') ? '#FFD70033' : p.startsWith('2nd') ? '#C0C0C033' : '#CD7F3233',
+                  color: p.startsWith('1st') ? '#FFD700' : p.startsWith('2nd') ? '#C0C0C0' : '#CD7F32',
+                  fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                }}>
+                  {p}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '1.1rem', color: 'var(--kids-color)', flexShrink: 0 }}>
           {formatDuration(row.totalMs)}
         </div>
-        <SaveButton onClick={() => downloadResultCard(row, 'kids')} />
+        <SaveButton onClick={() => downloadResultCard(row, 'kids', placements)} />
       </div>
     </div>
   )
 }
 
-function AdultResultCard({ rank, row }) {
+function AdultResultCard({ rank, row, placements = [] }) {
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -317,11 +385,24 @@ function AdultResultCard({ rank, row }) {
               </div>
             </>
           )}
+          {placements.length > 0 && (
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+              {placements.map(p => (
+                <span key={p} style={{
+                  background: p.startsWith('1st') ? '#FFD70033' : p.startsWith('2nd') ? '#C0C0C033' : '#CD7F3233',
+                  color: p.startsWith('1st') ? '#FFD700' : p.startsWith('2nd') ? '#C0C0C0' : '#CD7F32',
+                  fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                }}>
+                  {p}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '1.05rem', color: 'var(--adult-color)', flexShrink: 0 }}>
           {formatDuration(row.totalMs)}
         </div>
-        <SaveButton onClick={() => downloadResultCard(row, 'adult')} />
+        <SaveButton onClick={() => downloadResultCard(row, 'adult', placements)} />
       </div>
       {/* Split bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
@@ -393,7 +474,7 @@ function KidsTab() {
       <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 16, textAlign: 'right' }}>
         Updated {lastUpdate?.toLocaleTimeString()}
       </div>
-      {rows.map((row, i) => <KidsResultCard key={row.id} rank={i + 1} row={row} />)}
+      {rows.map((row, i) => <KidsResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'kids', rows, [], [])} />)}
     </div>
   )
 }
@@ -422,7 +503,11 @@ function AdultTab() {
       <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 16, textAlign: 'right' }}>
         Updated {lastUpdate?.toLocaleTimeString()}
       </div>
-      {rows.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} />)}
+      {rows.map((row, i) => {
+        const indAll = rows.filter(r => !r.isTeam)
+        const teamAll = rows.filter(r => r.isTeam)
+        return <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indAll, teamAll)} />
+      })}
     </div>
   )
 }
@@ -456,7 +541,7 @@ function FinalTab({ settings }) {
       {settings.kids_results_released && top3Kids.length > 0 && (
         <>
           <SectionLabel>Kids — Top 3</SectionLabel>
-          {top3Kids.map((row, i) => <KidsResultCard key={row.id} rank={i + 1} row={row} />)}
+          {top3Kids.map((row, i) => <KidsResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'kids', kids, [], [])} />)}
         </>
       )}
       {settings.kids_results_released && top3Kids.length === 0 && (
@@ -468,19 +553,19 @@ function FinalTab({ settings }) {
           {top3All.length > 0 && (
             <>
               <SectionLabel>Adults — Top 3 Overall</SectionLabel>
-              {top3All.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} />)}
+              {top3All.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
             </>
           )}
           {top3Men.length > 0 && (
             <>
               <SectionLabel>Adults — Top 3 Men</SectionLabel>
-              {top3Men.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} />)}
+              {top3Men.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
             </>
           )}
           {top3Women.length > 0 && (
             <>
               <SectionLabel>Adults — Top 3 Women</SectionLabel>
-              {top3Women.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} />)}
+              {top3Women.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
             </>
           )}
           {teamRows.length > 0 && (
