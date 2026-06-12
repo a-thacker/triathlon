@@ -277,21 +277,41 @@ export default function AdultTiming() {
               key={p.id}
               className={`participant-timing-row${isHighlighted ? ' highlighted' : ''}${isFinished ? ' finished' : ''}${isDNF ? ' dnf' : ''}`}
             >
-              {/* Row header — one line */}
+              {/* Row header */}
               <div className="timing-row-header">
                 <div className="race-num-badge">#{p.race_number}</div>
 
-                {/* Team color pill */}
                 {p.is_team && p.team_color && (
                   <span style={{ ...teamColorStyle(p.team_color), flexShrink: 0 }}>
                     {teamLabel(p.team_color)}
                   </span>
                 )}
 
-                {/* Name(s) — one line */}
-                <div className="participant-name" style={{ fontSize: p.is_team ? '0.92rem' : '1.05rem' }}>
-                  {displayName(p)}
-                </div>
+                {/* Individual vs team name display */}
+                {p.is_team ? (
+                  <div style={{ flex: 1, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {p.swimmer_name && (
+                      <span style={{ fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Swim</span>
+                        <strong>{p.swimmer_name}</strong>
+                      </span>
+                    )}
+                    {p.biker_name && (
+                      <span style={{ fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Bike</span>
+                        <strong>{p.biker_name}</strong>
+                      </span>
+                    )}
+                    {p.runner_name && (
+                      <span style={{ fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Run</span>
+                        <strong>{p.runner_name}</strong>
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="participant-name">{p.first_name} {p.last_name}</div>
+                )}
 
                 <div className="participant-age">Age {p.age}</div>
 
