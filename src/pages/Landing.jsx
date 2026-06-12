@@ -15,7 +15,7 @@ export default function Landing() {
       padding: '24px',
     }}>
       {/* Running figure */}
-      <div style={{ marginBottom: 32, transform: 'scale(2.5)', transformOrigin: 'center center' }}>
+      <div style={{ marginBottom: 56, transform: 'scale(2.5)', transformOrigin: 'center center' }}>
         <div className="running" style={{ '--color': 'var(--accent)' }}>
           <div className="outer">
             <div className="body">

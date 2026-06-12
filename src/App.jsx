@@ -19,7 +19,7 @@ import LiveResultsAdult  from './pages/LiveResultsAdult'
 import FinalResults   from './pages/FinalResults'
 import PrintResults   from './pages/PrintResults'
 
-function Sidebar() {
+function Sidebar({ collapsed, onToggle }) {
   const navigate = useNavigate()
 
   function logout() {
@@ -28,38 +28,67 @@ function Sidebar() {
   }
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <span>TriTimer</span>
+    <aside className="sidebar" style={{
+      width: collapsed ? 48 : 220,
+      transition: 'width 0.2s ease',
+      overflow: 'hidden',
+      flexShrink: 0,
+    }}>
+      {/* Logo row with toggle button */}
+      <div className="sidebar-logo" style={{
+        display: 'flex', alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        padding: collapsed ? '20px 0 12px' : '20px 16px 12px',
+      }}>
+        {!collapsed && <span>TriTimer</span>}
+        <button
+          onClick={onToggle}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--muted)', fontSize: '1rem', padding: '2px 4px',
+            lineHeight: 1, flexShrink: 0,
+          }}
+        >
+          {collapsed ? '›' : '‹'}
+        </button>
       </div>
-      <nav>
-        <div className="nav-section">Main</div>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app" end>Dashboard</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/participants">Participants</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/register">Registration</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/checkin">Check-In</NavLink>
 
-        <div className="nav-section">Timing</div>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/timing/kids">Kids Race</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/timing/adult">Adult Race</NavLink>
+      {/* Nav — hidden when collapsed */}
+      {!collapsed && (
+        <nav>
+          <div className="nav-section">Main</div>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app" end>Dashboard</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/participants">Participants</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/register">Registration</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/checkin">Check-In</NavLink>
 
-        <div className="nav-section">Results</div>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/live/kids">Live — Kids</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/live/adult">Live — Adult</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/final">Final Results</NavLink>
-        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/print">Print</NavLink>
-      </nav>
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
-        <button className="btn btn-ghost btn-sm w-full" onClick={logout}>Log Out</button>
-      </div>
+          <div className="nav-section">Timing</div>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/timing/kids">Kids Race</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/timing/adult">Adult Race</NavLink>
+
+          <div className="nav-section">Results</div>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/live/kids">Live — Kids</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/live/adult">Live — Adult</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/final">Final Results</NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/print">Print</NavLink>
+        </nav>
+      )}
+
+      {!collapsed && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+          <button className="btn btn-ghost btn-sm w-full" onClick={logout}>Log Out</button>
+        </div>
+      )}
     </aside>
   )
 }
 
 function OrganizerLayout() {
+  const [collapsed, setCollapsed] = React.useState(false)
   return (
     <div className="app-layout">
-      <Sidebar />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <main className="main-content">
         <Routes>
           <Route index element={<Dashboard />} />
