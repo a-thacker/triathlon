@@ -13,6 +13,9 @@ const BLANK = {
   received_swag_bag: false,
   is_team: false,
   team_color: '',
+  swimmer_name: '',
+  biker_name: '',
+  runner_name: '',
 }
 
 export default function Registration() {
@@ -46,6 +49,9 @@ export default function Registration() {
       received_swag_bag: data.received_swag_bag,
       is_team: data.is_team,
       team_color: data.team_color ?? '',
+      swimmer_name: data.swimmer_name ?? '',
+      biker_name: data.biker_name ?? '',
+      runner_name: data.runner_name ?? '',
     })
   }
 
@@ -80,44 +86,40 @@ export default function Registration() {
       setError('Please select a team color.')
       return
     }
+    if (form.is_team && !form.swimmer_name.trim() && !form.biker_name.trim() && !form.runner_name.trim()) {
+      setError('Please enter at least one team member name.')
+      return
+    }
 
     setSaving(true)
 
+    const payload = {
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      age: Number(form.age),
+      gender: form.gender,
+      race_type: form.race_type,
+      paid: form.paid,
+      received_swag_bag: form.received_swag_bag,
+      is_team: form.is_team,
+      team_color: form.is_team ? form.team_color : null,
+      swimmer_name: form.is_team ? form.swimmer_name.trim() : null,
+      biker_name:   form.is_team ? form.biker_name.trim()   : null,
+      runner_name:  form.is_team ? form.runner_name.trim()  : null,
+    }
+
     if (isEdit) {
-      const { error: err } = await supabase
-        .from('participants')
-        .update({
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          age: Number(form.age),
-          gender: form.gender,
-          race_type: form.race_type,
-          paid: form.paid,
-          received_swag_bag: form.received_swag_bag,
-          is_team: form.is_team,
-          team_color: form.is_team ? form.team_color : null,
-        })
-        .eq('id', id)
+      const { error: err } = await supabase.from('participants').update(payload).eq('id', id)
       setSaving(false)
       if (err) { setError(err.message); return }
       setSuccess('Participant updated.')
     } else {
       const race_number = await getNextRaceNumber(form.race_type)
-      const { error: err } = await supabase
-        .from('participants')
-        .insert({
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          age: Number(form.age),
-          gender: form.gender,
-          race_type: form.race_type,
-          race_number,
-          registration_date: new Date().toISOString().slice(0, 10),
-          paid: form.paid,
-          received_swag_bag: form.received_swag_bag,
-          is_team: form.is_team,
-          team_color: form.is_team ? form.team_color : null,
-        })
+      const { error: err } = await supabase.from('participants').insert({
+        ...payload,
+        race_number,
+        registration_date: new Date().toISOString().slice(0, 10),
+      })
       setSaving(false)
       if (err) { setError(err.message); return }
       setSuccess(`Registered! Race #${race_number} assigned.`)
@@ -126,9 +128,11 @@ export default function Registration() {
   }
 
   return (
-    <div style={{maxWidth: 560}}>
+    <div style={{ maxWidth: 560 }}>
       <div className="page-title">{isEdit ? 'Edit Participant' : 'New Registration'}</div>
-      <div className="page-sub">{isEdit ? 'Update participant information.' : 'Register a new participant. Race number will be assigned automatically.'}</div>
+      <div className="page-sub">
+        {isEdit ? 'Update participant information.' : 'Register a new participant. Race number assigned automatically.'}
+      </div>
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-ok">{success}</div>}
@@ -138,36 +142,18 @@ export default function Registration() {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">First Name *</label>
-              <input
-                className="form-input"
-                value={form.first_name}
-                onChange={e => set('first_name', e.target.value)}
-                placeholder="Jane"
-              />
+              <input className="form-input" value={form.first_name} onChange={e => set('first_name', e.target.value)} placeholder="Jane" />
             </div>
             <div className="form-group">
               <label className="form-label">Last Name *</label>
-              <input
-                className="form-input"
-                value={form.last_name}
-                onChange={e => set('last_name', e.target.value)}
-                placeholder="Smith"
-              />
+              <input className="form-input" value={form.last_name} onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Age *</label>
-              <input
-                className="form-input"
-                type="number"
-                min="1"
-                max="120"
-                value={form.age}
-                onChange={e => set('age', e.target.value)}
-                placeholder="34"
-              />
+              <input className="form-input" type="number" min="1" max="120" value={form.age} onChange={e => set('age', e.target.value)} placeholder="34" />
             </div>
             <div className="form-group">
               <label className="form-label">Gender</label>
@@ -185,10 +171,10 @@ export default function Registration() {
               <option value="adult">Adult Race</option>
               <option value="kids">Kids Race</option>
             </select>
-            {isEdit && <p className="text-muted text-sm" style={{marginTop:4}}>Race type cannot be changed after registration.</p>}
+            {isEdit && <p className="text-muted text-sm" style={{ marginTop: 4 }}>Race type cannot be changed after registration.</p>}
           </div>
 
-          <div className="form-row" style={{marginBottom:12}}>
+          <div className="form-row" style={{ marginBottom: 12 }}>
             <label className="checkbox-label">
               <input type="checkbox" checked={form.paid} onChange={e => set('paid', e.target.checked)} />
               Paid
@@ -201,7 +187,7 @@ export default function Registration() {
 
           {form.race_type === 'adult' && (
             <>
-              <div className="form-group" style={{marginTop:8}}>
+              <div className="form-group" style={{ marginTop: 8 }}>
                 <label className="checkbox-label">
                   <input type="checkbox" checked={form.is_team} onChange={e => set('is_team', e.target.checked)} />
                   Team Entry
@@ -209,26 +195,49 @@ export default function Registration() {
               </div>
 
               {form.is_team && (
-                <div className="form-group">
-                  <label className="form-label">Team Color *</label>
-                  <select className="form-select" value={form.team_color} onChange={e => set('team_color', e.target.value)}>
-                    <option value="">Select color...</option>
-                    {TEAM_COLORS.map(c => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                  {form.team_color && (
-                    <div style={{marginTop:8, display:'flex', alignItems:'center', gap:8}}>
-                      <div style={{width:28, height:28, borderRadius:6, background:form.team_color, border:'2px solid var(--border)'}} />
-                      <span>{TEAM_COLORS.find(c=>c.value===form.team_color)?.label} Team</span>
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Team Color *</label>
+                    <select className="form-select" value={form.team_color} onChange={e => set('team_color', e.target.value)}>
+                      <option value="">Select color...</option>
+                      {TEAM_COLORS.map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                    {form.team_color && (
+                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 6, background: form.team_color, border: '2px solid var(--border)' }} />
+                        <span>{TEAM_COLORS.find(c => c.value === form.team_color)?.label} Team</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: 16 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+                      Team Member Names
                     </div>
-                  )}
-                </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 12 }}>
+                      For a 2-person team, leave one field blank or repeat a name for two legs.
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Swimmer</label>
+                      <input className="form-input" value={form.swimmer_name} onChange={e => set('swimmer_name', e.target.value)} placeholder="Full name" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Biker</label>
+                      <input className="form-input" value={form.biker_name} onChange={e => set('biker_name', e.target.value)} placeholder="Full name" />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Runner</label>
+                      <input className="form-input" value={form.runner_name} onChange={e => set('runner_name', e.target.value)} placeholder="Full name" />
+                    </div>
+                  </div>
+                </>
               )}
             </>
           )}
 
-          <div style={{display:'flex', gap:12, marginTop:8}}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Register Participant'}
             </button>

@@ -18,6 +18,9 @@ create table if not exists participants (
   received_swag_bag boolean not null default false,
   is_team boolean not null default false,
   team_color text,
+  swimmer_name text,
+  biker_name   text,
+  runner_name  text,
   created_at timestamptz not null default now()
 );
 
@@ -96,3 +99,10 @@ alter table timing_records disable row level security;
 -- select * from participants limit 1;
 -- select * from race_events limit 1;
 -- select * from timing_records limit 1;
+
+-- ============================================================
+-- MIGRATION: Add team member name columns (run if table already exists)
+-- alter table participants add column if not exists swimmer_name text;
+-- alter table participants add column if not exists biker_name   text;
+-- alter table participants add column if not exists runner_name  text;
+-- ============================================================

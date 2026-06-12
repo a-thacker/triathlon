@@ -15,7 +15,7 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <span>TriTimer</span>
+        ⚡ <span>TriTime</span>
       </div>
       <nav>
         <div className="nav-section">Main</div>

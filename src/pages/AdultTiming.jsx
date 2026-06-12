@@ -69,13 +69,27 @@ export default function AdultTiming() {
     setTimeout(() => searchRef.current?.focus(), 50)
   }
 
-  const exactMatch = participants.find(p => String(p.race_number) === searchVal.trim())
-  const displayList = searchVal.trim()
-    ? participants.filter(p => {
-        const q = searchVal.trim()
-        return String(p.race_number).startsWith(q) ||
-          `${p.first_name} ${p.last_name}`.toLowerCase().includes(q.toLowerCase())
-      })
+  // Match on race number, name, or team color label (e.g. "red", "blue")
+  function matchesSearch(p, q) {
+    if (!q) return true
+    const lower = q.toLowerCase()
+    if (String(p.race_number).startsWith(q)) return true
+    if (`${p.first_name} ${p.last_name}`.toLowerCase().includes(lower)) return true
+    if (p.is_team && p.team_color) {
+      const colorLabel = TEAM_COLORS.find(c => c.value === p.team_color)?.label || ''
+      if (colorLabel.toLowerCase().includes(lower)) return true
+    }
+    // Also match individual team member names
+    if (p.swimmer_name && p.swimmer_name.toLowerCase().includes(lower)) return true
+    if (p.biker_name   && p.biker_name.toLowerCase().includes(lower))   return true
+    if (p.runner_name  && p.runner_name.toLowerCase().includes(lower))   return true
+    return false
+  }
+
+  const q = searchVal.trim()
+  const exactMatch = participants.find(p => String(p.race_number) === q)
+  const displayList = q
+    ? participants.filter(p => matchesSearch(p, q))
     : participants
 
   async function startRace() {
@@ -103,7 +117,6 @@ export default function AdultTiming() {
   }
 
   async function resetRace() {
-    // Delete ALL race events and timing records so old start timestamps can't bleed into results
     await supabase.from('timing_records').delete().eq('race_type', 'adult')
     await supabase.from('race_events').delete().eq('race_type', 'adult')
     setRaceStart(null)
@@ -136,9 +149,8 @@ export default function AdultTiming() {
   async function goBack(p) {
     const rec = timingRecords[p.id]
     if (!rec) return
-    // Clear the most recent checkpoint in reverse order
     let update = {}
-    if (rec.dnf)          update = { dnf: false }
+    if (rec.dnf)                update = { dnf: false }
     else if (rec.finish_time)   update = { finish_time: null }
     else if (rec.run_start)     update = { run_start: null }
     else if (rec.bike_complete) update = { bike_complete: null }
@@ -162,6 +174,28 @@ export default function AdultTiming() {
 
   function teamLabel(color) {
     return TEAM_COLORS.find(c => c.value === color)?.label || 'Team'
+  }
+
+  // Build a one-line name string for a participant
+  // Individual: "Jane Smith"
+  // Team: "Smith (Team) — Swimmer / Biker / Runner" with blanks skipped
+  function displayName(p) {
+    if (!p.is_team) return `${p.first_name} ${p.last_name}`
+    const members = [p.swimmer_name, p.biker_name, p.runner_name].filter(Boolean)
+    const unique = [...new Set(members)] // dedupe in case same name appears twice
+    return unique.join(' / ')
+  }
+
+  // Which leg name to show next to the current action button (for teams)
+  function currentLegName(p, rec) {
+    if (!p.is_team) return null
+    if (!rec) return null
+    if (!rec.swim_complete) return p.swimmer_name || null
+    if (!rec.bike_start)    return p.swimmer_name || null  // still in T1, swimmer just finished
+    if (!rec.bike_complete) return p.biker_name   || null
+    if (!rec.run_start)     return p.biker_name   || null  // still in T2, biker just finished
+    if (!rec.finish_time)   return p.runner_name  || null
+    return null
   }
 
   if (loading) return <div className="text-muted">Loading...</div>
@@ -202,7 +236,7 @@ export default function AdultTiming() {
         <input
           ref={searchRef}
           className="form-input"
-          placeholder="Type race number..."
+          placeholder="Race number, name, or team color..."
           value={searchVal}
           onChange={e => setSearchVal(e.target.value)}
           onKeyDown={e => {
@@ -235,39 +269,35 @@ export default function AdultTiming() {
           const next = raceStart && !raceEnded ? nextAdultAction(rec) : null
           const canGoBack = raceStart && !raceEnded && rec &&
             (rec.swim_complete || rec.bike_start || rec.bike_complete || rec.run_start || rec.finish_time || rec.dnf)
-
           const splits = calcAdultSplits(rec, raceStart)
-
-          // Progress steps
-          const steps = [
-            { key: 'start',        label: 'Start',      done: !!raceStart },
-            { key: 'swim_complete', label: 'Swim',       done: !!rec?.swim_complete },
-            { key: 't1',           label: 'T1',         done: !!rec?.bike_start, split: splits.t1Ms },
-            { key: 'bike_start',   label: 'Bike',       done: !!rec?.bike_complete },
-            { key: 't2',           label: 'T2',         done: !!rec?.run_start, split: splits.t2Ms },
-            { key: 'run_start',    label: 'Run',        done: !!rec?.finish_time },
-            { key: 'finish_time',  label: 'Finish',     done: !!rec?.finish_time },
-          ]
+          const legName = currentLegName(p, rec)
 
           return (
             <div
               key={p.id}
               className={`participant-timing-row${isHighlighted ? ' highlighted' : ''}${isFinished ? ' finished' : ''}${isDNF ? ' dnf' : ''}`}
             >
-              {/* Row header */}
+              {/* Row header — one line */}
               <div className="timing-row-header">
                 <div className="race-num-badge">#{p.race_number}</div>
-                <div className="participant-name">
-                  {p.is_team && p.team_color && (
-                    <span style={{ ...teamColorStyle(p.team_color), marginRight: 8 }}>
-                      {teamLabel(p.team_color)}
-                    </span>
-                  )}
-                  {p.first_name} {p.last_name}
+
+                {/* Team color pill */}
+                {p.is_team && p.team_color && (
+                  <span style={{ ...teamColorStyle(p.team_color), flexShrink: 0 }}>
+                    {teamLabel(p.team_color)}
+                  </span>
+                )}
+
+                {/* Name(s) — one line */}
+                <div className="participant-name" style={{ fontSize: p.is_team ? '0.92rem' : '1.05rem' }}>
+                  {displayName(p)}
                 </div>
+
                 <div className="participant-age">Age {p.age}</div>
+
+                {/* Status chip */}
                 <div style={{
-                  padding: '3px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
+                  padding: '3px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700, flexShrink: 0,
                   background: isDNF ? 'var(--danger)' : isFinished ? 'var(--success)' : raceStart ? '#00d4ff22' : 'var(--surface2)',
                   color: isDNF ? '#fff' : isFinished ? '#0f1117' : raceStart ? 'var(--accent)' : 'var(--muted)'
                 }}>
@@ -279,15 +309,33 @@ export default function AdultTiming() {
               <div className="progress-dots" style={{ marginBottom: 10 }}>
                 <span className={`dot ${raceStart ? 'done' : ''}`}>{raceStart ? 'v' : 'o'} Start</span>
                 <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.swim_complete ? 'done' : ''}`}>{rec?.swim_complete ? 'v' : 'o'} Swim{rec?.swim_complete && splits.swimMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.swimMs)}</small>}</span>
+                <span className={`dot ${rec?.swim_complete ? 'done' : ''}`}>
+                  {rec?.swim_complete ? 'v' : 'o'} Swim
+                  {rec?.swim_complete && splits.swimMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.swimMs)}</small>}
+                  {p.is_team && p.swimmer_name && <small style={{ color: 'var(--muted)', marginLeft: 4 }}>({p.swimmer_name.split(' ')[0]})</small>}
+                </span>
                 <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.bike_start ? 'done' : ''}`}>{rec?.bike_start ? 'v' : 'o'} T1{rec?.bike_start && splits.t1Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t1Ms)}</small>}</span>
+                <span className={`dot ${rec?.bike_start ? 'done' : ''}`}>
+                  {rec?.bike_start ? 'v' : 'o'} T1
+                  {rec?.bike_start && splits.t1Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t1Ms)}</small>}
+                </span>
                 <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.bike_complete ? 'done' : ''}`}>{rec?.bike_complete ? 'v' : 'o'} Bike{rec?.bike_complete && splits.bikeMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.bikeMs)}</small>}</span>
+                <span className={`dot ${rec?.bike_complete ? 'done' : ''}`}>
+                  {rec?.bike_complete ? 'v' : 'o'} Bike
+                  {rec?.bike_complete && splits.bikeMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.bikeMs)}</small>}
+                  {p.is_team && p.biker_name && <small style={{ color: 'var(--muted)', marginLeft: 4 }}>({p.biker_name.split(' ')[0]})</small>}
+                </span>
                 <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.run_start ? 'done' : ''}`}>{rec?.run_start ? 'v' : 'o'} T2{rec?.run_start && splits.t2Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t2Ms)}</small>}</span>
+                <span className={`dot ${rec?.run_start ? 'done' : ''}`}>
+                  {rec?.run_start ? 'v' : 'o'} T2
+                  {rec?.run_start && splits.t2Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t2Ms)}</small>}
+                </span>
                 <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.finish_time ? 'done' : ''}`}>{rec?.finish_time ? 'v' : 'o'} Run{rec?.finish_time && splits.runMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.runMs)}</small>}</span>
+                <span className={`dot ${rec?.finish_time ? 'done' : ''}`}>
+                  {rec?.finish_time ? 'v' : 'o'} Run
+                  {rec?.finish_time && splits.runMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.runMs)}</small>}
+                  {p.is_team && p.runner_name && <small style={{ color: 'var(--muted)', marginLeft: 4 }}>({p.runner_name.split(' ')[0]})</small>}
+                </span>
                 <span style={{ color: 'var(--border)' }}>-</span>
                 <span className={`dot ${isFinished ? 'done' : ''}`}>{isFinished ? 'v' : 'o'} Done</span>
                 {isFinished && splits.totalMs != null && (
@@ -302,7 +350,7 @@ export default function AdultTiming() {
                 <div className="timing-actions">
                   {next && (
                     <button className="btn btn-success btn-lg" onClick={() => applyCheckpoint(p, next.field)}>
-                      {next.label}
+                      {next.label}{legName ? ` — ${legName}` : ''}
                     </button>
                   )}
                   {canGoBack && (
