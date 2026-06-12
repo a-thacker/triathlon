@@ -537,3 +537,83 @@ tbody td {
 .text-sm { font-size: 0.85rem; }
 .text-right { text-align: right; }
 .w-full { width: 100%; }
+
+/* ── Running figure animation ── */
+.running {
+  --color: #fff;
+  --duration: .7s;
+}
+.running .outer {
+  animation: running-outer var(--duration) linear infinite;
+}
+.running .body {
+  background: var(--color);
+  height: 15px;
+  width: 8px;
+  border-radius: 4px;
+  transform-origin: 4px 11px;
+  position: relative;
+  transform: rotate(32deg);
+  animation: running-body var(--duration) linear infinite;
+}
+.running .body:before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  bottom: 16px;
+  left: 0;
+  position: absolute;
+  background: var(--color);
+}
+.running .arm,
+.running .arm:before,
+.running .leg,
+.running .leg:before {
+  content: '';
+  width: var(--w, 11px);
+  height: 4px;
+  top: var(--t, 0);
+  left: var(--l, 2px);
+  border-radius: 2px;
+  transform-origin: 2px 2px;
+  position: absolute;
+  background: var(--c, var(--color));
+  transform: rotate(var(--r, 0deg));
+  animation: var(--name, running-arm-leg) var(--duration) linear infinite;
+}
+.running .arm:before      { --l: 7px; --name: running-arm-b; }
+.running .arm.front       { --r: 24deg;  --r-to: 164deg; }
+.running .arm.front:before{ --r: -48deg; --r-to: -36deg; }
+.running .arm.behind      { --r: 164deg; --r-to: 24deg;  }
+.running .arm.behind:before{ --r: -36deg; --r-to: -48deg; }
+.running .leg             { --w: 12px; --t: 11px; }
+.running .leg:before      { --t: 0; --l: 8px; }
+.running .leg.front       { --r: 10deg;  --r-to: 108deg; }
+.running .leg.front:before{ --r: 18deg;  --r-to: 76deg;  }
+.running .leg.behind      { --r: 108deg; --r-to: 10deg; --c: none; }
+.running .leg.behind:before{ --c: var(--color); --r: 76deg; --r-to: 18deg; }
+.running .leg.behind:after {
+  content: '';
+  top: 0; right: 0;
+  height: 4px; width: 6px;
+  clip-path: polygon(2px 0, 6px 0, 6px 4px, 0 4px);
+  border-radius: 0 2px 2px 0;
+  position: absolute;
+  background: var(--color);
+}
+
+@keyframes running-outer {
+  50%    { transform: translateY(0); }
+  25%,75%{ transform: translateY(4px); }
+}
+@keyframes running-body {
+  50%    { transform: rotate(16deg); }
+  25%,75%{ transform: rotate(24deg); }
+}
+@keyframes running-arm-leg {
+  50% { transform: rotate(var(--r-to)); }
+}
+@keyframes running-arm-b {
+  30%,70% { transform: rotate(var(--r-to)); }
+}
