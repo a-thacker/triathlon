@@ -15,10 +15,13 @@ export default function Landing() {
       padding: '24px',
     }}>
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
-        <div style={{ fontSize: '2.4rem', fontWeight: 900, color: 'var(--accent)', letterSpacing: '-0.02em', marginBottom: 8 }}>
+        <div style={{ fontSize: '2.4rem', fontWeight: 900, color: 'var(--accent)', letterSpacing: '-0.02em', marginBottom: 4 }}>
           TriTimer
         </div>
-        <div style={{ color: 'var(--muted)', fontSize: '1rem' }}>
+        <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
+          Lawroweld 2026
+        </div>
+        <div style={{ color: 'var(--muted)', fontSize: '0.92rem' }}>
           Race day timing and results
         </div>
       </div>
@@ -31,7 +34,6 @@ export default function Landing() {
         >
           View Results
         </button>
-
         <button
           className="btn btn-ghost"
           style={{ padding: '22px', fontSize: '1.15rem', fontWeight: 700, borderRadius: 12, justifyContent: 'center' }}

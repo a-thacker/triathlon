@@ -56,7 +56,8 @@ function TeamsTable({ rows }) {
         <table>
           <thead>
             <tr>
-              <th>Rank</th><th>#(s)</th><th>Team</th><th>Swim</th><th>T1</th><th>Bike</th><th>T2</th><th>Run</th><th>Total</th>
+              <th>Rank</th><th>#(s)</th><th>Team</th>
+              <th>Swim</th><th>T1</th><th>Bike</th><th>T2</th><th>Run</th><th>Total</th>
             </tr>
           </thead>
           <tbody>
@@ -85,13 +86,13 @@ function TeamsTable({ rows }) {
 }
 
 async function loadResults() {
-  // Kids
   const { data: kEv } = await supabase.from('race_events').select('ts')
     .eq('race_type', 'kids').eq('event_type', 'start')
     .order('ts', { ascending: false }).limit(1)
   const kStart = kEv?.[0]?.ts || null
 
-  const { data: kTiming } = await supabase.from('timing_records').select('*, participants(*)')
+  const { data: kTiming } = await supabase.from('timing_records')
+    .select('*, participants(*)')
     .eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
   const kRows = (kTiming || []).map(r => ({
@@ -103,19 +104,14 @@ async function loadResults() {
     totalMs: diffMs(kStart, r.finish_time),
   })).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 
-  // Adults — start time
   const { data: aEv } = await supabase.from('race_events').select('ts')
     .eq('race_type', 'adult').eq('event_type', 'start')
     .order('ts', { ascending: false }).limit(1)
   const aStart = aEv?.[0]?.ts || null
 
-  // Individual timing records (participant_id set, no team_color)
   const { data: indTiming } = await supabase.from('timing_records')
     .select('*, participants(*)')
-    .eq('race_type', 'adult')
-    .not('finish_time', 'is', null)
-    .eq('dnf', false)
-    .not('participant_id', 'is', null)
+    .eq('race_type', 'adult').not('finish_time', 'is', null).eq('dnf', false)
     .is('team_color', null)
 
   const indRows = (indTiming || []).map(r => {
@@ -130,12 +126,8 @@ async function loadResults() {
     }
   }).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 
-  // Team timing records (team_color set)
-  const { data: teamTiming } = await supabase.from('timing_records')
-    .select('*')
-    .eq('race_type', 'adult')
-    .not('finish_time', 'is', null)
-    .eq('dnf', false)
+  const { data: teamTiming } = await supabase.from('timing_records').select('*')
+    .eq('race_type', 'adult').not('finish_time', 'is', null).eq('dnf', false)
     .not('team_color', 'is', null)
 
   const teamColors = (teamTiming || []).map(r => r.team_color)
@@ -166,23 +158,79 @@ async function loadResults() {
 }
 
 export default function FinalResults() {
-  const [kids, setKids]   = useState([])
-  const [ind, setInd]     = useState([])
-  const [teams, setTeams] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [kids, setKids]     = useState([])
+  const [ind, setInd]       = useState([])
+  const [teams, setTeams]   = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [settings, setSettings] = useState({ kids_results_released: false, adults_results_released: false })
+  const [saving, setSaving]     = useState('')
 
   useEffect(() => {
     loadResults().then(({ kRows, indRows, teamRows }) => {
       setKids(kRows); setInd(indRows); setTeams(teamRows); setLoading(false)
     })
+    loadSettings()
   }, [])
+
+  async function loadSettings() {
+    const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single()
+    if (data) setSettings(data)
+  }
+
+  async function toggleRelease(field) {
+    setSaving(field)
+    const newVal = !settings[field]
+    const { error } = await supabase.from('app_settings').update({ [field]: newVal }).eq('id', 1)
+    if (!error) setSettings(s => ({ ...s, [field]: newVal }))
+    setSaving('')
+  }
 
   if (loading) return <div className="text-muted">Loading...</div>
 
   return (
     <div>
       <div className="page-title">Final Results</div>
-      <div className="page-sub">Official race results</div>
+      <div className="page-sub">Official race results. Use the release buttons to make results visible to participants.</div>
+
+      {/* Release controls */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card-title">Participant Visibility</div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200, background: 'var(--surface2)', borderRadius: 8, padding: '14px 16px' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Kids Results</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 12 }}>
+              {settings.kids_results_released
+                ? 'Visible to participants on the public results page.'
+                : 'Hidden from participants. Release when ready to announce.'}
+            </div>
+            <button
+              className={`btn btn-sm ${settings.kids_results_released ? 'btn-danger' : 'btn-success'}`}
+              onClick={() => toggleRelease('kids_results_released')}
+              disabled={saving === 'kids_results_released'}
+            >
+              {saving === 'kids_results_released' ? 'Saving...'
+                : settings.kids_results_released ? 'Hide Results' : 'Release Results'}
+            </button>
+          </div>
+
+          <div style={{ flex: 1, minWidth: 200, background: 'var(--surface2)', borderRadius: 8, padding: '14px 16px' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Adult Results</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 12 }}>
+              {settings.adults_results_released
+                ? 'Visible to participants on the public results page.'
+                : 'Hidden from participants. Release when ready to announce.'}
+            </div>
+            <button
+              className={`btn btn-sm ${settings.adults_results_released ? 'btn-danger' : 'btn-success'}`}
+              onClick={() => toggleRelease('adults_results_released')}
+              disabled={saving === 'adults_results_released'}
+            >
+              {saving === 'adults_results_released' ? 'Saving...'
+                : settings.adults_results_released ? 'Hide Results' : 'Release Results'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <Section title="Kids Race — Top 3 Overall">
         <IndividualTable rows={kids.slice(0, 3)} />

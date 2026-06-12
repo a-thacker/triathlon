@@ -88,3 +88,18 @@ alter table timing_records disable row level security;
 -- (then re-run the create table timing_records block above)
 --
 -- ============================================================
+
+-- 4. APP SETTINGS (single-row config table)
+create table if not exists app_settings (
+  id integer primary key default 1,
+  kids_results_released boolean not null default false,
+  adults_results_released boolean not null default false,
+  constraint single_row check (id = 1)
+);
+
+-- Insert the one settings row if it doesn't exist
+insert into app_settings (id) values (1) on conflict do nothing;
+
+alter table app_settings disable row level security;
+
+-- MIGRATION: if table doesn't exist yet, run the create above.
