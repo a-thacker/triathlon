@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDuration, diffMs, adultStatus, teamColorStyle, TEAM_COLORS } from '../lib/utils'
+import { formatDuration, diffMs, adultStatus, teamColorStyle, TEAM_COLORS, nextAdultAction, calcAdultSplits } from '../lib/utils'
 import ConfirmModal from '../components/ConfirmModal'
 
 export default function AdultTiming() {
@@ -49,15 +49,18 @@ export default function AdultTiming() {
     if (evData && evData.length > 0) {
       const latest = evData[0]
       if (latest.event_type === 'reset') {
-        setRaceStart(null); setRaceEnded(false)
+        setRaceStart(null)
+        setRaceEnded(false)
       } else if (latest.event_type === 'end') {
         const startEv = evData.find(e => e.event_type === 'start')
         setRaceStart(startEv ? startEv.ts : null)
         setRaceEnded(true)
       } else if (latest.event_type === 'start') {
-        setRaceStart(latest.ts); setRaceEnded(false)
+        setRaceStart(latest.ts)
+        setRaceEnded(false)
       }
     }
+
     setLoading(false)
     focusSearch()
   }
@@ -78,7 +81,7 @@ export default function AdultTiming() {
   async function startRace() {
     const ts = new Date().toISOString()
     const { error } = await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'start', ts })
-    if (error) { alert('Error: ' + error.message); return }
+    if (error) { alert('Error starting race: ' + error.message); return }
     const inserts = participants.map(p => ({ participant_id: p.id, race_type: 'adult' }))
     if (inserts.length > 0) {
       await supabase.from('timing_records').upsert(inserts, { onConflict: 'participant_id', ignoreDuplicates: true })
@@ -94,13 +97,19 @@ export default function AdultTiming() {
 
   async function endRace() {
     await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'end', ts: new Date().toISOString() })
-    setRaceEnded(true); setConfirm(null); focusSearch()
+    setRaceEnded(true)
+    setConfirm(null)
+    focusSearch()
   }
 
   async function resetRace() {
     await supabase.from('timing_records').delete().eq('race_type', 'adult')
     await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'reset', ts: new Date().toISOString() })
-    setRaceStart(null); setRaceEnded(false); setTimingRecords({}); setConfirm(null); focusSearch()
+    setRaceStart(null)
+    setRaceEnded(false)
+    setTimingRecords({})
+    setConfirm(null)
+    focusSearch()
   }
 
   async function applyCheckpoint(p, field) {
@@ -109,7 +118,8 @@ export default function AdultTiming() {
     if (!rec) return
     const { error } = await supabase.from('timing_records').update({ [field]: ts }).eq('id', rec.id)
     if (!error) setTimingRecords(m => ({ ...m, [p.id]: { ...rec, [field]: ts } }))
-    setSearchVal(''); focusSearch()
+    setSearchVal('')
+    focusSearch()
   }
 
   async function markDNF(p) {
@@ -117,32 +127,28 @@ export default function AdultTiming() {
     if (!rec) return
     const { error } = await supabase.from('timing_records').update({ dnf: true }).eq('id', rec.id)
     if (!error) setTimingRecords(m => ({ ...m, [p.id]: { ...rec, dnf: true } }))
-    setSearchVal(''); focusSearch(); setConfirm(null)
+    setSearchVal('')
+    focusSearch()
+    setConfirm(null)
   }
 
   async function goBack(p) {
     const rec = timingRecords[p.id]
     if (!rec) return
-    // Find and clear most recent checkpoint
+    // Clear the most recent checkpoint in reverse order
     let update = {}
-    if (rec.dnf) update = { dnf: false }
-    else if (rec.finish_time) update = { finish_time: null }
-    else if (rec.run_complete) update = { run_complete: null }
+    if (rec.dnf)          update = { dnf: false }
+    else if (rec.finish_time)   update = { finish_time: null }
+    else if (rec.run_start)     update = { run_start: null }
     else if (rec.bike_complete) update = { bike_complete: null }
+    else if (rec.bike_start)    update = { bike_start: null }
     else if (rec.swim_complete) update = { swim_complete: null }
     else return
     const { error } = await supabase.from('timing_records').update(update).eq('id', rec.id)
     if (!error) setTimingRecords(m => ({ ...m, [p.id]: { ...rec, ...update } }))
-    setSearchVal(''); focusSearch(); setConfirm(null)
-  }
-
-  function getNextButton(rec) {
-    if (!rec || rec.dnf) return null
-    if (!rec.swim_complete) return { label: '🏊 Mark Swim Complete', field: 'swim_complete' }
-    if (!rec.bike_complete) return { label: '🚴 Mark Bike Complete', field: 'bike_complete' }
-    if (!rec.run_complete)  return { label: '🏃 Mark Run Complete',  field: 'run_complete'  }
-    if (!rec.finish_time)   return { label: '🏁 Mark Finished',      field: 'finish_time'   }
-    return null
+    setSearchVal('')
+    focusSearch()
+    setConfirm(null)
   }
 
   function getWarnings() {
@@ -153,37 +159,44 @@ export default function AdultTiming() {
     })
   }
 
+  function teamLabel(color) {
+    return TEAM_COLORS.find(c => c.value === color)?.label || 'Team'
+  }
+
   if (loading) return <div className="text-muted">Loading...</div>
 
   return (
     <div>
-      <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:16, flexWrap:'wrap'}}>
-        <div className="page-title" style={{marginBottom:0}}>Adult Race</div>
-        <div style={{flex:1}} />
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div className="page-title" style={{ marginBottom: 0 }}>Adult Race</div>
+        <div style={{ flex: 1 }} />
         <div style={{
-          padding:'6px 14px', borderRadius:'999px', fontWeight:700, fontSize:'0.85rem',
+          padding: '6px 14px', borderRadius: '999px', fontWeight: 700, fontSize: '0.85rem',
           background: raceStart ? (raceEnded ? 'var(--danger)' : 'var(--success)') : 'var(--surface2)',
           color: raceStart ? '#0f1117' : 'var(--muted)'
         }}>
           {!raceStart ? 'Waiting for Start' : raceEnded ? 'Race Ended' : 'Race Running'}
         </div>
         {raceStart && !raceEnded && (
-          <div style={{color:'var(--accent)', fontWeight:700, fontFamily:'monospace', fontSize:'1.1rem'}}>
+          <div style={{ color: 'var(--accent)', fontWeight: 700, fontFamily: 'monospace', fontSize: '1.1rem' }}>
             {formatDuration(now - new Date(raceStart).getTime())}
           </div>
         )}
       </div>
 
+      {/* Race controls */}
       <div className="race-controls">
         {!raceStart && (
-          <button className="btn btn-success btn-lg" onClick={() => setConfirm('start')}>▶ Start Race</button>
+          <button className="btn btn-success btn-lg" onClick={() => setConfirm('start')}>Start Race</button>
         )}
         {raceStart && !raceEnded && (
-          <button className="btn btn-danger" onClick={() => setConfirm('end')}>⬛ End Race</button>
+          <button className="btn btn-danger" onClick={() => setConfirm('end')}>End Race</button>
         )}
-        <button className="btn btn-ghost" onClick={() => setConfirm('reset')}>↺ Reset Race</button>
+        <button className="btn btn-ghost" onClick={() => setConfirm('reset')}>Reset Race</button>
       </div>
 
+      {/* Search */}
       <div className="timing-search">
         <input
           ref={searchRef}
@@ -194,49 +207,66 @@ export default function AdultTiming() {
           onKeyDown={e => {
             if (e.key === 'Enter' && exactMatch && raceStart && !raceEnded) {
               const rec = timingRecords[exactMatch.id]
-              const next = getNextButton(rec)
+              const next = nextAdultAction(rec)
               if (next) applyCheckpoint(exactMatch, next.field)
             }
           }}
         />
-        {raceStart && <div style={{fontSize:'0.8rem', color:'var(--muted)', marginTop:6}}>Press Enter to record next checkpoint for exact match</div>}
+        {raceStart && (
+          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 6 }}>
+            Press Enter to record next checkpoint for exact number match
+          </div>
+        )}
       </div>
 
-      {!raceStart && <div className="alert alert-warn">Race has not started. Press "Start Race" to begin timing.</div>}
+      {!raceStart && (
+        <div className="alert alert-warn">Race has not started. Press "Start Race" to begin timing.</div>
+      )}
 
+      {/* Participant rows */}
       <div>
         {displayList.map(p => {
           const rec = timingRecords[p.id]
           const status = adultStatus(rec, !!raceStart)
           const isHighlighted = exactMatch?.id === p.id
-          const isFinished = rec?.finish_time
-          const isDNF = rec?.dnf
-          const nextBtn = raceStart && !raceEnded ? getNextButton(rec) : null
+          const isFinished = !!rec?.finish_time
+          const isDNF = !!rec?.dnf
+          const next = raceStart && !raceEnded ? nextAdultAction(rec) : null
+          const canGoBack = raceStart && !raceEnded && rec &&
+            (rec.swim_complete || rec.bike_start || rec.bike_complete || rec.run_start || rec.finish_time || rec.dnf)
 
-          // Splits
-          const swimMs  = diffMs(raceStart, rec?.swim_complete)
-          const t1Ms    = diffMs(rec?.swim_complete, rec?.bike_complete)
-          const bikeMs  = diffMs(rec?.bike_complete, rec?.run_complete)
-          const runMs   = diffMs(rec?.run_complete, rec?.finish_time)
-          const totalMs = diffMs(raceStart, rec?.finish_time)
+          const splits = calcAdultSplits(rec, raceStart)
+
+          // Progress steps
+          const steps = [
+            { key: 'start',        label: 'Start',      done: !!raceStart },
+            { key: 'swim_complete', label: 'Swim',       done: !!rec?.swim_complete },
+            { key: 't1',           label: 'T1',         done: !!rec?.bike_start, split: splits.t1Ms },
+            { key: 'bike_start',   label: 'Bike',       done: !!rec?.bike_complete },
+            { key: 't2',           label: 'T2',         done: !!rec?.run_start, split: splits.t2Ms },
+            { key: 'run_start',    label: 'Run',        done: !!rec?.finish_time },
+            { key: 'finish_time',  label: 'Finish',     done: !!rec?.finish_time },
+          ]
 
           return (
             <div
               key={p.id}
-              className={`participant-timing-row ${isHighlighted ? 'highlighted' : ''} ${isFinished ? 'finished' : ''} ${isDNF ? 'dnf' : ''}`}
+              className={`participant-timing-row${isHighlighted ? ' highlighted' : ''}${isFinished ? ' finished' : ''}${isDNF ? ' dnf' : ''}`}
             >
+              {/* Row header */}
               <div className="timing-row-header">
                 <div className="race-num-badge">#{p.race_number}</div>
                 <div className="participant-name">
-                  {p.is_team && p.team_color
-                    ? <span style={{...teamColorStyle(p.team_color), marginRight:8}}>{TEAM_COLORS.find(c=>c.value===p.team_color)?.label || 'Team'}</span>
-                    : null
-                  }
+                  {p.is_team && p.team_color && (
+                    <span style={{ ...teamColorStyle(p.team_color), marginRight: 8 }}>
+                      {teamLabel(p.team_color)}
+                    </span>
+                  )}
                   {p.first_name} {p.last_name}
                 </div>
                 <div className="participant-age">Age {p.age}</div>
                 <div style={{
-                  padding:'3px 12px', borderRadius:'999px', fontSize:'0.78rem', fontWeight:700,
+                  padding: '3px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                   background: isDNF ? 'var(--danger)' : isFinished ? 'var(--success)' : raceStart ? '#00d4ff22' : 'var(--surface2)',
                   color: isDNF ? '#fff' : isFinished ? '#0f1117' : raceStart ? 'var(--accent)' : 'var(--muted)'
                 }}>
@@ -244,49 +274,58 @@ export default function AdultTiming() {
                 </div>
               </div>
 
-              {/* Progress */}
-              <div className="progress-dots" style={{marginBottom:8}}>
-                <span className={`dot ${raceStart ? 'done' : ''}`}>{raceStart?'✓':'○'} Start</span>
-                <span style={{color:'var(--border)'}}>›</span>
-                <span className={`dot ${rec?.swim_complete ? 'done' : ''}`}>{rec?.swim_complete?'✓':'○'} Swim {rec?.swim_complete && <small style={{color:'var(--muted)'}}>{formatDuration(swimMs)}</small>}</span>
-                <span style={{color:'var(--border)'}}>›</span>
-                <span className={`dot ${rec?.bike_complete ? 'done' : ''}`}>{rec?.bike_complete?'✓':'○'} T1/Bike {rec?.bike_complete && <small style={{color:'var(--muted)'}}>{formatDuration(bikeMs)}</small>}</span>
-                <span style={{color:'var(--border)'}}>›</span>
-                <span className={`dot ${rec?.run_complete ? 'done' : ''}`}>{rec?.run_complete?'✓':'○'} Run {rec?.run_complete && <small style={{color:'var(--muted)'}}>{formatDuration(runMs)}</small>}</span>
-                <span style={{color:'var(--border)'}}>›</span>
-                <span className={`dot ${rec?.finish_time ? 'done' : ''}`}>{rec?.finish_time?'✓':'○'} Finish</span>
-                {isFinished && (
-                  <span style={{marginLeft:12, color:'var(--adult-color)', fontWeight:800, fontSize:'0.95rem'}}>
-                    Total: {formatDuration(totalMs)}
+              {/* Progress dots */}
+              <div className="progress-dots" style={{ marginBottom: 10 }}>
+                <span className={`dot ${raceStart ? 'done' : ''}`}>{raceStart ? 'v' : 'o'} Start</span>
+                <span style={{ color: 'var(--border)' }}>-</span>
+                <span className={`dot ${rec?.swim_complete ? 'done' : ''}`}>{rec?.swim_complete ? 'v' : 'o'} Swim{rec?.swim_complete && splits.swimMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.swimMs)}</small>}</span>
+                <span style={{ color: 'var(--border)' }}>-</span>
+                <span className={`dot ${rec?.bike_start ? 'done' : ''}`}>{rec?.bike_start ? 'v' : 'o'} T1{rec?.bike_start && splits.t1Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t1Ms)}</small>}</span>
+                <span style={{ color: 'var(--border)' }}>-</span>
+                <span className={`dot ${rec?.bike_complete ? 'done' : ''}`}>{rec?.bike_complete ? 'v' : 'o'} Bike{rec?.bike_complete && splits.bikeMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.bikeMs)}</small>}</span>
+                <span style={{ color: 'var(--border)' }}>-</span>
+                <span className={`dot ${rec?.run_start ? 'done' : ''}`}>{rec?.run_start ? 'v' : 'o'} T2{rec?.run_start && splits.t2Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t2Ms)}</small>}</span>
+                <span style={{ color: 'var(--border)' }}>-</span>
+                <span className={`dot ${rec?.finish_time ? 'done' : ''}`}>{rec?.finish_time ? 'v' : 'o'} Run{rec?.finish_time && splits.runMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.runMs)}</small>}</span>
+                <span style={{ color: 'var(--border)' }}>-</span>
+                <span className={`dot ${isFinished ? 'done' : ''}`}>{isFinished ? 'v' : 'o'} Done</span>
+                {isFinished && splits.totalMs != null && (
+                  <span style={{ marginLeft: 12, color: 'var(--adult-color)', fontWeight: 800, fontSize: '0.95rem' }}>
+                    Total: {formatDuration(splits.totalMs)}
                   </span>
                 )}
               </div>
 
-              {/* Actions */}
+              {/* Action buttons */}
               {raceStart && !raceEnded && (
                 <div className="timing-actions">
-                  {nextBtn && (
-                    <button className="btn btn-success btn-lg" onClick={() => applyCheckpoint(p, nextBtn.field)}>
-                      {nextBtn.label}
+                  {next && (
+                    <button className="btn btn-success btn-lg" onClick={() => applyCheckpoint(p, next.field)}>
+                      {next.label}
                     </button>
                   )}
-                  {(rec?.swim_complete || isDNF) && (
-                    <button className="btn btn-ghost" onClick={() => setConfirm({ type: 'goback', p })}>← Go Back</button>
+                  {canGoBack && (
+                    <button className="btn btn-ghost" onClick={() => setConfirm({ type: 'goback', p })}>
+                      Go Back
+                    </button>
                   )}
                   {!isDNF && !isFinished && (
-                    <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ type: 'dnf', p })}>DNF</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ type: 'dnf', p })}>
+                      DNF
+                    </button>
                   )}
                 </div>
               )}
 
-              {/* Split detail if finished */}
+              {/* Split summary when finished */}
               {isFinished && (
-                <div style={{display:'flex', gap:20, marginTop:8, fontSize:'0.82rem', color:'var(--muted)', flexWrap:'wrap'}}>
-                  <span>Swim: <strong style={{color:'var(--text)'}}>{formatDuration(swimMs)}</strong></span>
-                  <span>T1: <strong style={{color:'var(--text)'}}>{formatDuration(t1Ms)}</strong></span>
-                  <span>Bike: <strong style={{color:'var(--text)'}}>{formatDuration(bikeMs)}</strong></span>
-                  <span>Run: <strong style={{color:'var(--text)'}}>{formatDuration(runMs)}</strong></span>
-                  <span>Total: <strong style={{color:'var(--adult-color)'}}>{formatDuration(totalMs)}</strong></span>
+                <div style={{ display: 'flex', gap: 20, marginTop: 8, fontSize: '0.82rem', color: 'var(--muted)', flexWrap: 'wrap' }}>
+                  <span>Swim: <strong style={{ color: 'var(--text)' }}>{formatDuration(splits.swimMs)}</strong></span>
+                  <span>T1: <strong style={{ color: 'var(--text)' }}>{formatDuration(splits.t1Ms)}</strong></span>
+                  <span>Bike: <strong style={{ color: 'var(--text)' }}>{formatDuration(splits.bikeMs)}</strong></span>
+                  <span>T2: <strong style={{ color: 'var(--text)' }}>{formatDuration(splits.t2Ms)}</strong></span>
+                  <span>Run: <strong style={{ color: 'var(--text)' }}>{formatDuration(splits.runMs)}</strong></span>
+                  <span>Total: <strong style={{ color: 'var(--adult-color)' }}>{formatDuration(splits.totalMs)}</strong></span>
                 </div>
               )}
             </div>
@@ -294,10 +333,11 @@ export default function AdultTiming() {
         })}
       </div>
 
+      {/* Confirm modals */}
       {confirm === 'start' && (
         <ConfirmModal
           title="Start Adult Race?"
-          message={`This will record the official race start for all ${participants.length} checked-in adults. This cannot be undone.`}
+          message={`This records the official race start for all ${participants.length} checked-in adults. This cannot be undone.`}
           onConfirm={startRace}
           onCancel={() => setConfirm(null)}
           confirmLabel="Start Race"
@@ -312,9 +352,9 @@ export default function AdultTiming() {
           danger
         >
           {getWarnings().length > 0 && (
-            <div className="alert alert-warn" style={{marginBottom:12}}>
+            <div className="alert alert-warn" style={{ marginBottom: 12 }}>
               <strong>{getWarnings().length} participant(s) not finished:</strong>
-              <div style={{marginTop:6}}>
+              <div style={{ marginTop: 6 }}>
                 {getWarnings().map(p => <div key={p.id}>#{p.race_number} {p.first_name} {p.last_name}</div>)}
               </div>
             </div>

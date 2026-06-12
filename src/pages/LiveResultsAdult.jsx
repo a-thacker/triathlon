@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDuration, diffMs, teamColorStyle, TEAM_COLORS } from '../lib/utils'
+import { formatDuration, diffMs, teamColorStyle, TEAM_COLORS, calcAdultSplits } from '../lib/utils'
 
 export default function LiveResultsAdult() {
   const [results, setResults] = useState([])
-  const [raceStart, setRaceStart] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
 
   useEffect(() => {
@@ -16,14 +15,13 @@ export default function LiveResultsAdult() {
   async function load() {
     const { data: evData } = await supabase
       .from('race_events')
-      .select('*')
+      .select('ts')
       .eq('race_type', 'adult')
       .eq('event_type', 'start')
       .order('ts', { ascending: false })
       .limit(1)
 
     const startTs = evData?.[0]?.ts || null
-    setRaceStart(startTs)
 
     const { data: tData } = await supabase
       .from('timing_records')
@@ -33,21 +31,17 @@ export default function LiveResultsAdult() {
       .eq('dnf', false)
 
     const sorted = (tData || [])
-      .map(r => ({
-        ...r,
-        totalMs: diffMs(startTs, r.finish_time),
-        swimMs:  diffMs(startTs, r.swim_complete),
-        t1Ms:    diffMs(r.swim_complete, r.bike_complete),
-        bikeMs:  diffMs(r.bike_complete, r.run_complete),
-        runMs:   diffMs(r.run_complete, r.finish_time),
-      }))
+      .map(r => {
+        const splits = calcAdultSplits(r, startTs)
+        return { ...r, ...splits }
+      })
       .sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 
     setResults(sorted)
     setLastUpdate(new Date())
   }
 
-  function teamColorLabel(color) {
+  function teamLabel(color) {
     return TEAM_COLORS.find(c => c.value === color)?.label || 'Team'
   }
 
@@ -62,7 +56,7 @@ export default function LiveResultsAdult() {
       {results.length === 0 ? (
         <div className="alert alert-info">No finishers yet.</div>
       ) : (
-        <div className="card" style={{padding:0, overflow:'hidden'}}>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-wrap">
             <table>
               <thead>
@@ -76,6 +70,7 @@ export default function LiveResultsAdult() {
                   <th>Swim</th>
                   <th>T1</th>
                   <th>Bike</th>
+                  <th>T2</th>
                   <th>Run</th>
                   <th>Total</th>
                 </tr>
@@ -83,24 +78,23 @@ export default function LiveResultsAdult() {
               <tbody>
                 {results.map((r, i) => (
                   <tr key={r.id}>
-                    <td style={{fontSize:'1.1rem', fontWeight:800, color:'var(--adult-color)'}}>
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                    </td>
+                    <td style={{ fontWeight: 800, color: 'var(--adult-color)' }}>{i + 1}</td>
                     <td className="font-bold text-accent">{r.participants?.race_number}</td>
                     <td className="font-bold">{r.participants?.first_name} {r.participants?.last_name}</td>
                     <td>{r.participants?.age}</td>
-                    <td style={{textTransform:'capitalize'}}>{r.participants?.gender}</td>
+                    <td style={{ textTransform: 'capitalize' }}>{r.participants?.gender}</td>
                     <td>
                       {r.participants?.is_team && r.participants?.team_color
-                        ? <span style={teamColorStyle(r.participants.team_color)}>{teamColorLabel(r.participants.team_color)}</span>
+                        ? <span style={teamColorStyle(r.participants.team_color)}>{teamLabel(r.participants.team_color)}</span>
                         : '—'
                       }
                     </td>
-                    <td style={{fontFamily:'monospace'}}>{formatDuration(r.swimMs)}</td>
-                    <td style={{fontFamily:'monospace', color:'var(--muted)'}}>{formatDuration(r.t1Ms)}</td>
-                    <td style={{fontFamily:'monospace'}}>{formatDuration(r.bikeMs)}</td>
-                    <td style={{fontFamily:'monospace'}}>{formatDuration(r.runMs)}</td>
-                    <td style={{color:'var(--adult-color)', fontWeight:800, fontSize:'1.05rem', fontFamily:'monospace'}}>
+                    <td style={{ fontFamily: 'monospace' }}>{formatDuration(r.swimMs)}</td>
+                    <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{formatDuration(r.t1Ms)}</td>
+                    <td style={{ fontFamily: 'monospace' }}>{formatDuration(r.bikeMs)}</td>
+                    <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{formatDuration(r.t2Ms)}</td>
+                    <td style={{ fontFamily: 'monospace' }}>{formatDuration(r.runMs)}</td>
+                    <td style={{ color: 'var(--adult-color)', fontWeight: 800, fontSize: '1.05rem', fontFamily: 'monospace' }}>
                       {formatDuration(r.totalMs)}
                     </td>
                   </tr>

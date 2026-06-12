@@ -11,53 +11,36 @@ export function formatDuration(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-// Diff two ISO timestamp strings → ms
+// Diff two ISO timestamp strings -> ms
 export function diffMs(start, end) {
   if (!start || !end) return null
   return new Date(end) - new Date(start)
 }
 
 // Calculate adult splits from a timing record + race start ISO string
+// Stage order: race_start -> swim -> [T1] -> bike_start -> bike -> [T2] -> run_start -> finish
 export function calcAdultSplits(record, raceStart) {
   if (!record || !raceStart) return {}
-  const swim = diffMs(raceStart, record.swim_complete)
-  const t1   = diffMs(record.swim_complete, record.bike_complete)
-  const bike = diffMs(record.bike_complete, record.run_complete)
-  const t2   = diffMs(record.run_complete, record.finish_time)  // T2 is run_complete → finish (run leg)
-  // Actually: bike split = bike_complete - swim_complete - t1
-  // Let's clarify:
-  // swim split   = swim_complete - race_start
-  // T1           = bike_complete - swim_complete  (transition)
-  // bike split   = run_complete  - bike_complete
-  // T2           = finish_time   - run_complete   (transition / run? per spec run split = run_complete → finish)
-  // Run split    = finish_time   - run_complete
-  // Total        = finish_time   - race_start
   return {
-    swimMs:  diffMs(raceStart, record.swim_complete),
-    t1Ms:    diffMs(record.swim_complete, record.bike_complete),
-    bikeMs:  diffMs(record.bike_complete, record.run_complete),
-    t2Ms:    diffMs(record.run_complete, record.finish_time),
-    totalMs: diffMs(raceStart, record.finish_time),
+    swimMs:      diffMs(raceStart,           record.swim_complete),
+    t1Ms:        diffMs(record.swim_complete, record.bike_start),
+    bikeMs:      diffMs(record.bike_start,    record.bike_complete),
+    t2Ms:        diffMs(record.bike_complete, record.run_start),
+    runMs:       diffMs(record.run_start,     record.finish_time),
+    totalMs:     diffMs(raceStart,            record.finish_time),
   }
 }
 
-// Calculate kids total time
-export function calcKidsSplits(record, raceStart) {
-  if (!record || !raceStart) return {}
-  return {
-    totalMs: diffMs(raceStart, record.finish_time),
-  }
-}
-
-// Derive adult status from timing record + whether race has started
+// Derive adult status label from timing record + whether race has started
 export function adultStatus(record, raceStarted) {
   if (!raceStarted) return 'Waiting for Start'
   if (!record) return 'Swimming'
   if (record.dnf) return 'DNF'
-  if (record.finish_time) return 'Finished'
-  if (record.run_complete) return 'Running'
+  if (record.finish_time)   return 'Finished'
+  if (record.run_start)     return 'Running'
   if (record.bike_complete) return 'In T2'
-  if (record.swim_complete) return 'Biking'
+  if (record.bike_start)    return 'Biking'
+  if (record.swim_complete) return 'In T1'
   return 'Swimming'
 }
 
@@ -68,6 +51,17 @@ export function kidsStatus(record, raceStarted) {
   if (record.dnf) return 'DNF'
   if (record.finish_time) return 'Finished'
   return 'Running'
+}
+
+// Get the next button definition for an adult participant
+// Returns { label, field } or null if finished/DNF
+export function nextAdultAction(record) {
+  if (!record || record.dnf || record.finish_time) return null
+  if (!record.swim_complete) return { label: 'Mark Swim Complete', field: 'swim_complete' }
+  if (!record.bike_start)    return { label: 'Begin Bike',          field: 'bike_start'    }
+  if (!record.bike_complete) return { label: 'Mark Bike Complete',  field: 'bike_complete' }
+  if (!record.run_start)     return { label: 'Begin Run',            field: 'run_start'     }
+  return                            { label: 'Finish',               field: 'finish_time'   }
 }
 
 // Team color pill style
