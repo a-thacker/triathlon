@@ -164,13 +164,28 @@ export default function FinalResults() {
   const [loading, setLoading]   = useState(true)
   const [settings, setSettings] = useState({ kids_results_released: false, adults_results_released: false })
   const [saving, setSaving]     = useState('')
+  const [raceStatus, setRaceStatus] = useState({ kids: 'not_started', adult: 'not_started' })
 
   useEffect(() => {
     loadResults().then(({ kRows, indRows, teamRows }) => {
       setKids(kRows); setInd(indRows); setTeams(teamRows); setLoading(false)
     })
     loadSettings()
+    loadRaceStatus()
   }, [])
+
+  async function loadRaceStatus() {
+    const { data } = await supabase.from('race_events').select('race_type, event_type')
+    if (!data) return
+    const status = { kids: 'not_started', adult: 'not_started' }
+    // Check each race type
+    ;['kids', 'adult'].forEach(rt => {
+      const events = data.filter(e => e.race_type === rt).map(e => e.event_type)
+      if (events.includes('end'))        status[rt] = 'ended'
+      else if (events.includes('start')) status[rt] = 'running'
+    })
+    setRaceStatus(status)
+  }
 
   async function loadSettings() {
     const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single()
@@ -196,39 +211,53 @@ export default function FinalResults() {
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="card-title">Participant Visibility</div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+
+          {/* Kids */}
           <div style={{ flex: 1, minWidth: 200, background: 'var(--surface2)', borderRadius: 8, padding: '14px 16px' }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Kids Results</div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 12 }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 8 }}>
               {settings.kids_results_released
                 ? 'Visible to participants on the public results page.'
                 : 'Hidden from participants. Release when ready to announce.'}
             </div>
+            {raceStatus.kids !== 'ended' && !settings.kids_results_released && (
+              <div className="alert alert-warn" style={{ marginBottom: 8, fontSize: '0.78rem', padding: '6px 10px' }}>
+                {raceStatus.kids === 'not_started' ? 'Race has not started yet.' : 'Race is still running. End the race before releasing results.'}
+              </div>
+            )}
             <button
               className={`btn btn-sm ${settings.kids_results_released ? 'btn-danger' : 'btn-success'}`}
               onClick={() => toggleRelease('kids_results_released')}
-              disabled={saving === 'kids_results_released'}
+              disabled={saving === 'kids_results_released' || (raceStatus.kids !== 'ended' && !settings.kids_results_released)}
             >
               {saving === 'kids_results_released' ? 'Saving...'
                 : settings.kids_results_released ? 'Hide Results' : 'Release Results'}
             </button>
           </div>
 
+          {/* Adults */}
           <div style={{ flex: 1, minWidth: 200, background: 'var(--surface2)', borderRadius: 8, padding: '14px 16px' }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Adult Results</div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 12 }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 8 }}>
               {settings.adults_results_released
                 ? 'Visible to participants on the public results page.'
                 : 'Hidden from participants. Release when ready to announce.'}
             </div>
+            {raceStatus.adult !== 'ended' && !settings.adults_results_released && (
+              <div className="alert alert-warn" style={{ marginBottom: 8, fontSize: '0.78rem', padding: '6px 10px' }}>
+                {raceStatus.adult === 'not_started' ? 'Race has not started yet.' : 'Race is still running. End the race before releasing results.'}
+              </div>
+            )}
             <button
               className={`btn btn-sm ${settings.adults_results_released ? 'btn-danger' : 'btn-success'}`}
               onClick={() => toggleRelease('adults_results_released')}
-              disabled={saving === 'adults_results_released'}
+              disabled={saving === 'adults_results_released' || (raceStatus.adult !== 'ended' && !settings.adults_results_released)}
             >
               {saving === 'adults_results_released' ? 'Saving...'
                 : settings.adults_results_released ? 'Hide Results' : 'Release Results'}
             </button>
           </div>
+
         </div>
       </div>
 

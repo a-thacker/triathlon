@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatDuration, diffMs, teamColorStyle, TEAM_COLORS, nextAdultAction, calcAdultSplits } from '../lib/utils'
 import ConfirmModal from '../components/ConfirmModal'
+import ResetConfirmModal from '../components/ResetConfirmModal'
 
 // Derive status label from timing record
 function adultStatusLabel(rec, raceStarted) {
@@ -484,13 +485,11 @@ export default function AdultTiming() {
         </ConfirmModal>
       )}
       {confirm === 'reset' && (
-        <ConfirmModal
+        <ResetConfirmModal
           title="Reset Adult Race?"
-          message="This will delete ALL timing data for the adult race. This cannot be undone."
+          finishedCount={Object.values(timingMap).filter(r => r.finish_time).length}
           onConfirm={resetRace}
           onCancel={() => setConfirm(null)}
-          confirmLabel="Reset Everything"
-          danger
         />
       )}
       {confirm?.type === 'goback' && (

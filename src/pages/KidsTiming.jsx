@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatDuration, diffMs, kidsStatus } from '../lib/utils'
 import ConfirmModal from '../components/ConfirmModal'
+import ResetConfirmModal from '../components/ResetConfirmModal'
 
 export default function KidsTiming() {
   const [participants, setParticipants] = useState([])
@@ -340,13 +341,11 @@ export default function KidsTiming() {
         </ConfirmModal>
       )}
       {confirm === 'reset' && (
-        <ConfirmModal
+        <ResetConfirmModal
           title="Reset Kids Race?"
-          message="This will delete ALL timing data for the kids race. This cannot be undone."
+          finishedCount={Object.values(timingRecords).filter(r => r.finish_time).length}
           onConfirm={resetRace}
           onCancel={() => setConfirm(null)}
-          confirmLabel="Reset Everything"
-          danger
         />
       )}
       {confirm?.type === 'goback' && (
