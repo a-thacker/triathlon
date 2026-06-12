@@ -115,12 +115,9 @@ export default function KidsTiming() {
   }
 
   async function resetRace() {
-    // Delete timing records for kids
+    // Delete ALL race events and timing records so old start timestamps can't bleed into results
     await supabase.from('timing_records').delete().eq('race_type', 'kids')
-    // Insert reset event
-    await supabase.from('race_events').insert({
-      race_type: 'kids', event_type: 'reset', ts: new Date().toISOString()
-    })
+    await supabase.from('race_events').delete().eq('race_type', 'kids')
     setRaceStart(null)
     setRaceEnded(false)
     setTimingRecords({})

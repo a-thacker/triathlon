@@ -103,8 +103,9 @@ export default function AdultTiming() {
   }
 
   async function resetRace() {
+    // Delete ALL race events and timing records so old start timestamps can't bleed into results
     await supabase.from('timing_records').delete().eq('race_type', 'adult')
-    await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'reset', ts: new Date().toISOString() })
+    await supabase.from('race_events').delete().eq('race_type', 'adult')
     setRaceStart(null)
     setRaceEnded(false)
     setTimingRecords({})

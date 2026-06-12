@@ -109,7 +109,7 @@ export default function FinalResults() {
 
   async function load() {
     // Kids
-    const { data: kEv } = await supabase.from('race_events').select('ts').eq('race_type', 'kids').eq('event_type', 'start').limit(1)
+    const { data: kEv } = await supabase.from('race_events').select('ts').eq('race_type', 'kids').eq('event_type', 'start').order('ts', { ascending: false }).limit(1)
     const kStart = kEv?.[0]?.ts || null
     const { data: kTiming } = await supabase.from('timing_records').select('*, participants(*)').eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
@@ -124,7 +124,7 @@ export default function FinalResults() {
     setKidsResults(kRows)
 
     // Adults
-    const { data: aEv } = await supabase.from('race_events').select('ts').eq('race_type', 'adult').eq('event_type', 'start').limit(1)
+    const { data: aEv } = await supabase.from('race_events').select('ts').eq('race_type', 'adult').eq('event_type', 'start').order('ts', { ascending: false }).limit(1)
     const aStart = aEv?.[0]?.ts || null
     const { data: aTiming } = await supabase.from('timing_records').select('*, participants(*)').eq('race_type', 'adult').not('finish_time', 'is', null).eq('dnf', false)
 
