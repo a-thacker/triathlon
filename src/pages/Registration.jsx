@@ -13,9 +13,7 @@ const BLANK = {
   received_swag_bag: false,
   is_team: false,
   team_color: '',
-  swimmer_name: '',
-  biker_name: '',
-  runner_name: '',
+  team_role: 'swimmer',
 }
 
 export default function Registration() {
@@ -28,16 +26,11 @@ export default function Registration() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    if (isEdit) loadParticipant()
-  }, [id])
+  useEffect(() => { if (isEdit) loadParticipant() }, [id])
 
   async function loadParticipant() {
     const { data, error } = await supabase
-      .from('participants')
-      .select('*')
-      .eq('id', id)
-      .single()
+      .from('participants').select('*').eq('id', id).single()
     if (error) { setError('Participant not found'); return }
     setForm({
       first_name: data.first_name,
@@ -49,9 +42,7 @@ export default function Registration() {
       received_swag_bag: data.received_swag_bag,
       is_team: data.is_team,
       team_color: data.team_color ?? '',
-      swimmer_name: data.swimmer_name ?? '',
-      biker_name: data.biker_name ?? '',
-      runner_name: data.runner_name ?? '',
+      team_role: data.team_role ?? 'swimmer',
     })
   }
 
@@ -61,11 +52,9 @@ export default function Registration() {
 
   async function getNextRaceNumber(race_type) {
     const { data } = await supabase
-      .from('participants')
-      .select('race_number')
+      .from('participants').select('race_number')
       .eq('race_type', race_type)
-      .order('race_number', { ascending: false })
-      .limit(1)
+      .order('race_number', { ascending: false }).limit(1)
     return data && data.length > 0 ? data[0].race_number + 1 : 1
   }
 
@@ -86,8 +75,8 @@ export default function Registration() {
       setError('Please select a team color.')
       return
     }
-    if (form.is_team && !form.swimmer_name.trim() && !form.biker_name.trim() && !form.runner_name.trim()) {
-      setError('Please enter at least one team member name.')
+    if (form.is_team && !form.team_role) {
+      setError('Please select this person\'s role on the team.')
       return
     }
 
@@ -103,9 +92,7 @@ export default function Registration() {
       received_swag_bag: form.received_swag_bag,
       is_team: form.is_team,
       team_color: form.is_team ? form.team_color : null,
-      swimmer_name: form.is_team ? form.swimmer_name.trim() : null,
-      biker_name:   form.is_team ? form.biker_name.trim()   : null,
-      runner_name:  form.is_team ? form.runner_name.trim()  : null,
+      team_role:  form.is_team ? form.team_role  : null,
     }
 
     if (isEdit) {
@@ -134,7 +121,7 @@ export default function Registration() {
         {isEdit ? 'Update participant information.' : 'Register a new participant. Race number assigned automatically.'}
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error   && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-ok">{success}</div>}
 
       <div className="card">
@@ -142,18 +129,21 @@ export default function Registration() {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">First Name *</label>
-              <input className="form-input" value={form.first_name} onChange={e => set('first_name', e.target.value)} placeholder="Jane" />
+              <input className="form-input" value={form.first_name}
+                onChange={e => set('first_name', e.target.value)} placeholder="Jane" />
             </div>
             <div className="form-group">
               <label className="form-label">Last Name *</label>
-              <input className="form-input" value={form.last_name} onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
+              <input className="form-input" value={form.last_name}
+                onChange={e => set('last_name', e.target.value)} placeholder="Smith" />
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Age *</label>
-              <input className="form-input" type="number" min="1" max="120" value={form.age} onChange={e => set('age', e.target.value)} placeholder="34" />
+              <input className="form-input" type="number" min="1" max="120"
+                value={form.age} onChange={e => set('age', e.target.value)} placeholder="34" />
             </div>
             <div className="form-group">
               <label className="form-label">Gender</label>
@@ -167,7 +157,8 @@ export default function Registration() {
 
           <div className="form-group">
             <label className="form-label">Race Type</label>
-            <select className="form-select" value={form.race_type} onChange={e => set('race_type', e.target.value)} disabled={isEdit}>
+            <select className="form-select" value={form.race_type}
+              onChange={e => set('race_type', e.target.value)} disabled={isEdit}>
               <option value="adult">Adult Race</option>
               <option value="kids">Kids Race</option>
             </select>
@@ -180,7 +171,8 @@ export default function Registration() {
               Paid
             </label>
             <label className="checkbox-label">
-              <input type="checkbox" checked={form.received_swag_bag} onChange={e => set('received_swag_bag', e.target.checked)} />
+              <input type="checkbox" checked={form.received_swag_bag}
+                onChange={e => set('received_swag_bag', e.target.checked)} />
               Received Swag Bag
             </label>
           </div>
@@ -189,16 +181,22 @@ export default function Registration() {
             <>
               <div className="form-group" style={{ marginTop: 8 }}>
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={form.is_team} onChange={e => set('is_team', e.target.checked)} />
+                  <input type="checkbox" checked={form.is_team}
+                    onChange={e => set('is_team', e.target.checked)} />
                   Team Entry
                 </label>
               </div>
 
               {form.is_team && (
-                <>
+                <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: 16 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+                    Team Details
+                  </div>
+
                   <div className="form-group">
                     <label className="form-label">Team Color *</label>
-                    <select className="form-select" value={form.team_color} onChange={e => set('team_color', e.target.value)}>
+                    <select className="form-select" value={form.team_color}
+                      onChange={e => set('team_color', e.target.value)}>
                       <option value="">Select color...</option>
                       {TEAM_COLORS.map(c => (
                         <option key={c.value} value={c.value}>{c.label}</option>
@@ -206,33 +204,25 @@ export default function Registration() {
                     </select>
                     {form.team_color && (
                       <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 6, background: form.team_color, border: '2px solid var(--border)' }} />
+                        <div style={{ width: 24, height: 24, borderRadius: 4, background: form.team_color, border: '2px solid var(--border)' }} />
                         <span>{TEAM_COLORS.find(c => c.value === form.team_color)?.label} Team</span>
                       </div>
                     )}
                   </div>
 
-                  <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: 16 }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
-                      Team Member Names
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 12 }}>
-                      For a 2-person team, leave one field blank or repeat a name for two legs.
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Swimmer</label>
-                      <input className="form-input" value={form.swimmer_name} onChange={e => set('swimmer_name', e.target.value)} placeholder="Full name" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Biker</label>
-                      <input className="form-input" value={form.biker_name} onChange={e => set('biker_name', e.target.value)} placeholder="Full name" />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Runner</label>
-                      <input className="form-input" value={form.runner_name} onChange={e => set('runner_name', e.target.value)} placeholder="Full name" />
-                    </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">This Person's Role *</label>
+                    <select className="form-select" value={form.team_role}
+                      onChange={e => set('team_role', e.target.value)}>
+                      <option value="swimmer">Swimmer</option>
+                      <option value="biker">Biker</option>
+                      <option value="runner">Runner</option>
+                    </select>
+                    <p className="text-muted text-sm" style={{ marginTop: 6 }}>
+                      Register each team member separately with the same team color. Assign each person their leg.
+                    </p>
                   </div>
-                </>
+                </div>
               )}
             </>
           )}

@@ -1,17 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDuration, diffMs, adultStatus, teamColorStyle, TEAM_COLORS, nextAdultAction, calcAdultSplits } from '../lib/utils'
+import { formatDuration, diffMs, teamColorStyle, TEAM_COLORS, nextAdultAction, calcAdultSplits } from '../lib/utils'
 import ConfirmModal from '../components/ConfirmModal'
 
+// Derive status label from timing record
+function adultStatusLabel(rec, raceStarted) {
+  if (!raceStarted) return 'Waiting for Start'
+  if (!rec) return 'Swimming'
+  if (rec.dnf) return 'DNF'
+  if (rec.finish_time)   return 'Finished'
+  if (rec.run_start)     return 'Running'
+  if (rec.bike_complete) return 'In T2'
+  if (rec.bike_start)    return 'Biking'
+  if (rec.swim_complete) return 'In T1'
+  return 'Swimming'
+}
+
 export default function AdultTiming() {
-  const [participants, setParticipants] = useState([])
-  const [timingRecords, setTimingRecords] = useState({})
-  const [raceStart, setRaceStart] = useState(null)
-  const [raceEnded, setRaceEnded] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [searchVal, setSearchVal] = useState('')
-  const [confirm, setConfirm] = useState(null)
-  const [now, setNow] = useState(Date.now())
+  const [participants, setParticipants] = useState([])   // all checked-in adults
+  const [timingMap, setTimingMap]       = useState({})   // key: participant_id OR "team:COLOR" -> record
+  const [raceStart, setRaceStart]       = useState(null)
+  const [raceEnded, setRaceEnded]       = useState(false)
+  const [loading, setLoading]           = useState(true)
+  const [searchVal, setSearchVal]       = useState('')
+  const [confirm, setConfirm]           = useState(null)
+  const [now, setNow]                   = useState(Date.now())
   const searchRef = useRef()
 
   useEffect(() => {
@@ -42,16 +55,24 @@ export default function AdultTiming() {
 
     setParticipants(pData || [])
 
+    // Build timing map:
+    // - individuals: key = participant_id
+    // - teams:       key = "team:COLOR"
     const tMap = {}
-    if (tData) tData.forEach(r => { tMap[r.participant_id] = r })
-    setTimingRecords(tMap)
+    if (tData) {
+      tData.forEach(r => {
+        if (r.team_color) {
+          tMap[`team:${r.team_color}`] = r
+        } else if (r.participant_id) {
+          tMap[r.participant_id] = r
+        }
+      })
+    }
+    setTimingMap(tMap)
 
     if (evData && evData.length > 0) {
       const latest = evData[0]
-      if (latest.event_type === 'reset') {
-        setRaceStart(null)
-        setRaceEnded(false)
-      } else if (latest.event_type === 'end') {
+      if (latest.event_type === 'end') {
         const startEv = evData.find(e => e.event_type === 'start')
         setRaceStart(startEv ? startEv.ts : null)
         setRaceEnded(true)
@@ -69,44 +90,102 @@ export default function AdultTiming() {
     setTimeout(() => searchRef.current?.focus(), 50)
   }
 
-  // Match on race number, name, or team color label (e.g. "red", "blue")
-  function matchesSearch(p, q) {
+  // Group participants: individuals stay solo, team members group by color
+  // Returns array of "entries" — either { type:'individual', participant } or { type:'team', color, members[] }
+  function buildEntries(list) {
+    const entries = []
+    const teamMap = {}
+
+    list.forEach(p => {
+      if (p.is_team && p.team_color) {
+        if (!teamMap[p.team_color]) {
+          teamMap[p.team_color] = { type: 'team', color: p.team_color, members: [] }
+          entries.push(teamMap[p.team_color])
+        }
+        teamMap[p.team_color].members.push(p)
+      } else {
+        entries.push({ type: 'individual', participant: p })
+      }
+    })
+
+    // Sort team members by role order: swimmer -> biker -> runner
+    const roleOrder = { swimmer: 0, biker: 1, runner: 2 }
+    Object.values(teamMap).forEach(t => {
+      t.members.sort((a, b) => (roleOrder[a.team_role] ?? 9) - (roleOrder[b.team_role] ?? 9))
+    })
+
+    return entries
+  }
+
+  // Search: match individual by number/name, team by color label or any member name/number
+  function matchesSearch(entry, q) {
     if (!q) return true
     const lower = q.toLowerCase()
-    if (String(p.race_number).startsWith(q)) return true
-    if (`${p.first_name} ${p.last_name}`.toLowerCase().includes(lower)) return true
-    if (p.is_team && p.team_color) {
-      const colorLabel = TEAM_COLORS.find(c => c.value === p.team_color)?.label || ''
-      if (colorLabel.toLowerCase().includes(lower)) return true
+    if (entry.type === 'individual') {
+      const p = entry.participant
+      return String(p.race_number).startsWith(q) ||
+        `${p.first_name} ${p.last_name}`.toLowerCase().includes(lower)
     }
-    // Also match individual team member names
-    if (p.swimmer_name && p.swimmer_name.toLowerCase().includes(lower)) return true
-    if (p.biker_name   && p.biker_name.toLowerCase().includes(lower))   return true
-    if (p.runner_name  && p.runner_name.toLowerCase().includes(lower))   return true
-    return false
+    // team
+    const colorLabel = TEAM_COLORS.find(c => c.value === entry.color)?.label || ''
+    if (colorLabel.toLowerCase().includes(lower)) return true
+    return entry.members.some(p =>
+      String(p.race_number).startsWith(q) ||
+      `${p.first_name} ${p.last_name}`.toLowerCase().includes(lower)
+    )
+  }
+
+  // Exact match: race number matches any member or individual
+  function findExactEntry(entries, q) {
+    if (!q) return null
+    return entries.find(entry => {
+      if (entry.type === 'individual') return String(entry.participant.race_number) === q
+      return entry.members.some(p => String(p.race_number) === q)
+    })
   }
 
   const q = searchVal.trim()
-  const exactMatch = participants.find(p => String(p.race_number) === q)
-  const displayList = q
-    ? participants.filter(p => matchesSearch(p, q))
-    : participants
+  const allEntries = buildEntries(participants)
+  const displayEntries = q ? allEntries.filter(e => matchesSearch(e, q)) : allEntries
+  const exactEntry = findExactEntry(allEntries, q)
+
+  // Get timing record for an entry
+  function recForEntry(entry) {
+    if (entry.type === 'individual') return timingMap[entry.participant.id]
+    return timingMap[`team:${entry.color}`]
+  }
 
   async function startRace() {
     const ts = new Date().toISOString()
     const { error } = await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'start', ts })
     if (error) { alert('Error starting race: ' + error.message); return }
-    const inserts = participants.map(p => ({ participant_id: p.id, race_type: 'adult' }))
+
+    // Create timing records for individuals and one per team
+    const inserts = []
+    allEntries.forEach(entry => {
+      if (entry.type === 'individual') {
+        inserts.push({ participant_id: entry.participant.id, race_type: 'adult' })
+      } else {
+        // one record per team, keyed by team_color
+        inserts.push({ team_color: entry.color, race_type: 'adult' })
+      }
+    })
+
     if (inserts.length > 0) {
-      await supabase.from('timing_records').upsert(inserts, { onConflict: 'participant_id', ignoreDuplicates: true })
+      await supabase.from('timing_records').upsert(inserts, { ignoreDuplicates: true })
     }
+
     setRaceStart(ts)
     setConfirm(null)
     focusSearch()
+
     const { data } = await supabase.from('timing_records').select('*').eq('race_type', 'adult')
     const tMap = {}
-    if (data) data.forEach(r => { tMap[r.participant_id] = r })
-    setTimingRecords(tMap)
+    if (data) data.forEach(r => {
+      if (r.team_color) tMap[`team:${r.team_color}`] = r
+      else if (r.participant_id) tMap[r.participant_id] = r
+    })
+    setTimingMap(tMap)
   }
 
   async function endRace() {
@@ -121,33 +200,39 @@ export default function AdultTiming() {
     await supabase.from('race_events').delete().eq('race_type', 'adult')
     setRaceStart(null)
     setRaceEnded(false)
-    setTimingRecords({})
+    setTimingMap({})
     setConfirm(null)
     focusSearch()
   }
 
-  async function applyCheckpoint(p, field) {
+  async function applyCheckpoint(entry, field) {
     const ts = new Date().toISOString()
-    const rec = timingRecords[p.id]
+    const rec = recForEntry(entry)
     if (!rec) return
     const { error } = await supabase.from('timing_records').update({ [field]: ts }).eq('id', rec.id)
-    if (!error) setTimingRecords(m => ({ ...m, [p.id]: { ...rec, [field]: ts } }))
+    if (!error) {
+      const key = entry.type === 'individual' ? entry.participant.id : `team:${entry.color}`
+      setTimingMap(m => ({ ...m, [key]: { ...rec, [field]: ts } }))
+    }
     setSearchVal('')
     focusSearch()
   }
 
-  async function markDNF(p) {
-    const rec = timingRecords[p.id]
+  async function markDNF(entry) {
+    const rec = recForEntry(entry)
     if (!rec) return
     const { error } = await supabase.from('timing_records').update({ dnf: true }).eq('id', rec.id)
-    if (!error) setTimingRecords(m => ({ ...m, [p.id]: { ...rec, dnf: true } }))
+    if (!error) {
+      const key = entry.type === 'individual' ? entry.participant.id : `team:${entry.color}`
+      setTimingMap(m => ({ ...m, [key]: { ...rec, dnf: true } }))
+    }
     setSearchVal('')
     focusSearch()
     setConfirm(null)
   }
 
-  async function goBack(p) {
-    const rec = timingRecords[p.id]
+  async function goBack(entry) {
+    const rec = recForEntry(entry)
     if (!rec) return
     let update = {}
     if (rec.dnf)                update = { dnf: false }
@@ -158,44 +243,30 @@ export default function AdultTiming() {
     else if (rec.swim_complete) update = { swim_complete: null }
     else return
     const { error } = await supabase.from('timing_records').update(update).eq('id', rec.id)
-    if (!error) setTimingRecords(m => ({ ...m, [p.id]: { ...rec, ...update } }))
+    if (!error) {
+      const key = entry.type === 'individual' ? entry.participant.id : `team:${entry.color}`
+      setTimingMap(m => ({ ...m, [key]: { ...rec, ...update } }))
+    }
     setSearchVal('')
     focusSearch()
     setConfirm(null)
   }
 
   function getWarnings() {
-    return participants.filter(p => {
-      const rec = timingRecords[p.id]
+    return allEntries.filter(entry => {
+      const rec = recForEntry(entry)
       if (!rec) return !!raceStart
       return !rec.finish_time && !rec.dnf
     })
   }
 
-  function teamLabel(color) {
+  function teamColorLabel(color) {
     return TEAM_COLORS.find(c => c.value === color)?.label || 'Team'
   }
 
-  // Build a one-line name string for a participant
-  // Individual: "Jane Smith"
-  // Team: "Smith (Team) — Swimmer / Biker / Runner" with blanks skipped
-  function displayName(p) {
-    if (!p.is_team) return `${p.first_name} ${p.last_name}`
-    const members = [p.swimmer_name, p.biker_name, p.runner_name].filter(Boolean)
-    const unique = [...new Set(members)] // dedupe in case same name appears twice
-    return unique.join(' / ')
-  }
-
-  // Which leg name to show next to the current action button (for teams)
-  function currentLegName(p, rec) {
-    if (!p.is_team) return null
-    if (!rec) return null
-    if (!rec.swim_complete) return p.swimmer_name || null
-    if (!rec.bike_start)    return p.swimmer_name || null  // still in T1, swimmer just finished
-    if (!rec.bike_complete) return p.biker_name   || null
-    if (!rec.run_start)     return p.biker_name   || null  // still in T2, biker just finished
-    if (!rec.finish_time)   return p.runner_name  || null
-    return null
+  function entryLabel(entry) {
+    if (entry.type === 'individual') return `${entry.participant.first_name} ${entry.participant.last_name}`
+    return `${teamColorLabel(entry.color)} Team`
   }
 
   if (loading) return <div className="text-muted">Loading...</div>
@@ -240,10 +311,10 @@ export default function AdultTiming() {
           value={searchVal}
           onChange={e => setSearchVal(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && exactMatch && raceStart && !raceEnded) {
-              const rec = timingRecords[exactMatch.id]
+            if (e.key === 'Enter' && exactEntry && raceStart && !raceEnded) {
+              const rec = recForEntry(exactEntry)
               const next = nextAdultAction(rec)
-              if (next) applyCheckpoint(exactMatch, next.field)
+              if (next) applyCheckpoint(exactEntry, next.field)
             }
           }}
         />
@@ -258,62 +329,53 @@ export default function AdultTiming() {
         <div className="alert alert-warn">Race has not started. Press "Start Race" to begin timing.</div>
       )}
 
-      {/* Participant rows */}
+      {/* Entries */}
       <div>
-        {displayList.map(p => {
-          const rec = timingRecords[p.id]
-          const status = adultStatus(rec, !!raceStart)
-          const isHighlighted = exactMatch?.id === p.id
+        {displayEntries.map((entry, idx) => {
+          const rec = recForEntry(entry)
+          const status = adultStatusLabel(rec, !!raceStart)
+          const isHighlighted = exactEntry === entry
           const isFinished = !!rec?.finish_time
           const isDNF = !!rec?.dnf
           const next = raceStart && !raceEnded ? nextAdultAction(rec) : null
           const canGoBack = raceStart && !raceEnded && rec &&
             (rec.swim_complete || rec.bike_start || rec.bike_complete || rec.run_start || rec.finish_time || rec.dnf)
           const splits = calcAdultSplits(rec, raceStart)
-          const legName = currentLegName(p, rec)
+          const isTeam = entry.type === 'team'
 
           return (
             <div
-              key={p.id}
+              key={isTeam ? `team-${entry.color}` : entry.participant.id}
               className={`participant-timing-row${isHighlighted ? ' highlighted' : ''}${isFinished ? ' finished' : ''}${isDNF ? ' dnf' : ''}`}
             >
-              {/* Row header */}
+              {/* Header row */}
               <div className="timing-row-header">
-                <div className="race-num-badge">#{p.race_number}</div>
-
-                {p.is_team && p.team_color && (
-                  <span style={{ ...teamColorStyle(p.team_color), flexShrink: 0 }}>
-                    {teamLabel(p.team_color)}
-                  </span>
-                )}
-
-                {/* Individual vs team name display */}
-                {p.is_team ? (
-                  <div style={{ flex: 1, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {p.swimmer_name && (
-                      <span style={{ fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Swim</span>
-                        <strong>{p.swimmer_name}</strong>
-                      </span>
-                    )}
-                    {p.biker_name && (
-                      <span style={{ fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Bike</span>
-                        <strong>{p.biker_name}</strong>
-                      </span>
-                    )}
-                    {p.runner_name && (
-                      <span style={{ fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Run</span>
-                        <strong>{p.runner_name}</strong>
-                      </span>
-                    )}
-                  </div>
+                {isTeam ? (
+                  // Team: color pill + race numbers + member names by role
+                  <>
+                    <span style={{ ...teamColorStyle(entry.color), flexShrink: 0, fontSize: '0.95rem' }}>
+                      {teamColorLabel(entry.color)}
+                    </span>
+                    <div style={{ flex: 1, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {entry.members.map(p => (
+                        <span key={p.id} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ color: 'var(--accent)', fontWeight: 900, fontSize: '1rem' }}>#{p.race_number}</span>
+                          <span style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            {p.team_role}
+                          </span>
+                          <strong>{p.first_name} {p.last_name}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </>
                 ) : (
-                  <div className="participant-name">{p.first_name} {p.last_name}</div>
+                  // Individual
+                  <>
+                    <div className="race-num-badge">#{entry.participant.race_number}</div>
+                    <div className="participant-name">{entry.participant.first_name} {entry.participant.last_name}</div>
+                    <div className="participant-age">Age {entry.participant.age}</div>
+                  </>
                 )}
-
-                <div className="participant-age">Age {p.age}</div>
 
                 {/* Status chip */}
                 <div style={{
@@ -327,37 +389,25 @@ export default function AdultTiming() {
 
               {/* Progress dots */}
               <div className="progress-dots" style={{ marginBottom: 10 }}>
-                <span className={`dot ${raceStart ? 'done' : ''}`}>{raceStart ? 'v' : 'o'} Start</span>
-                <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.swim_complete ? 'done' : ''}`}>
-                  {rec?.swim_complete ? 'v' : 'o'} Swim
-                  {rec?.swim_complete && splits.swimMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.swimMs)}</small>}
-                  {p.is_team && p.swimmer_name && <small style={{ color: 'var(--muted)', marginLeft: 4 }}>({p.swimmer_name.split(' ')[0]})</small>}
-                </span>
-                <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.bike_start ? 'done' : ''}`}>
-                  {rec?.bike_start ? 'v' : 'o'} T1
-                  {rec?.bike_start && splits.t1Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t1Ms)}</small>}
-                </span>
-                <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.bike_complete ? 'done' : ''}`}>
-                  {rec?.bike_complete ? 'v' : 'o'} Bike
-                  {rec?.bike_complete && splits.bikeMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.bikeMs)}</small>}
-                  {p.is_team && p.biker_name && <small style={{ color: 'var(--muted)', marginLeft: 4 }}>({p.biker_name.split(' ')[0]})</small>}
-                </span>
-                <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.run_start ? 'done' : ''}`}>
-                  {rec?.run_start ? 'v' : 'o'} T2
-                  {rec?.run_start && splits.t2Ms != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.t2Ms)}</small>}
-                </span>
-                <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${rec?.finish_time ? 'done' : ''}`}>
-                  {rec?.finish_time ? 'v' : 'o'} Run
-                  {rec?.finish_time && splits.runMs != null && <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(splits.runMs)}</small>}
-                  {p.is_team && p.runner_name && <small style={{ color: 'var(--muted)', marginLeft: 4 }}>({p.runner_name.split(' ')[0]})</small>}
-                </span>
-                <span style={{ color: 'var(--border)' }}>-</span>
-                <span className={`dot ${isFinished ? 'done' : ''}`}>{isFinished ? 'v' : 'o'} Done</span>
+                {[
+                  { label: 'Start',  done: !!raceStart,          split: null },
+                  { label: 'Swim',   done: !!rec?.swim_complete,  split: splits.swimMs },
+                  { label: 'T1',     done: !!rec?.bike_start,     split: splits.t1Ms   },
+                  { label: 'Bike',   done: !!rec?.bike_complete,  split: splits.bikeMs },
+                  { label: 'T2',     done: !!rec?.run_start,      split: splits.t2Ms   },
+                  { label: 'Run',    done: !!rec?.finish_time,    split: splits.runMs  },
+                  { label: 'Finish', done: !!rec?.finish_time,    split: null          },
+                ].map((step, i, arr) => (
+                  <React.Fragment key={step.label}>
+                    <span className={`dot ${step.done ? 'done' : ''}`}>
+                      {step.done ? 'v' : 'o'} {step.label}
+                      {step.done && step.split != null &&
+                        <small style={{ color: 'var(--muted)', marginLeft: 3 }}>{formatDuration(step.split)}</small>
+                      }
+                    </span>
+                    {i < arr.length - 1 && <span style={{ color: 'var(--border)' }}>-</span>}
+                  </React.Fragment>
+                ))}
                 {isFinished && splits.totalMs != null && (
                   <span style={{ marginLeft: 12, color: 'var(--adult-color)', fontWeight: 800, fontSize: '0.95rem' }}>
                     Total: {formatDuration(splits.totalMs)}
@@ -369,17 +419,17 @@ export default function AdultTiming() {
               {raceStart && !raceEnded && (
                 <div className="timing-actions">
                   {next && (
-                    <button className="btn btn-success btn-lg" onClick={() => applyCheckpoint(p, next.field)}>
-                      {next.label}{legName ? ` — ${legName}` : ''}
+                    <button className="btn btn-success btn-lg" onClick={() => applyCheckpoint(entry, next.field)}>
+                      {next.label}
                     </button>
                   )}
                   {canGoBack && (
-                    <button className="btn btn-ghost" onClick={() => setConfirm({ type: 'goback', p })}>
+                    <button className="btn btn-ghost" onClick={() => setConfirm({ type: 'goback', entry })}>
                       Go Back
                     </button>
                   )}
                   {!isDNF && !isFinished && (
-                    <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ type: 'dnf', p })}>
+                    <button className="btn btn-danger btn-sm" onClick={() => setConfirm({ type: 'dnf', entry })}>
                       DNF
                     </button>
                   )}
@@ -406,7 +456,7 @@ export default function AdultTiming() {
       {confirm === 'start' && (
         <ConfirmModal
           title="Start Adult Race?"
-          message={`This records the official race start for all ${participants.length} checked-in adults. This cannot be undone.`}
+          message={`This records the official race start for all ${allEntries.length} entries. This cannot be undone.`}
           onConfirm={startRace}
           onCancel={() => setConfirm(null)}
           confirmLabel="Start Race"
@@ -422,9 +472,11 @@ export default function AdultTiming() {
         >
           {getWarnings().length > 0 && (
             <div className="alert alert-warn" style={{ marginBottom: 12 }}>
-              <strong>{getWarnings().length} participant(s) not finished:</strong>
+              <strong>{getWarnings().length} entr{getWarnings().length === 1 ? 'y' : 'ies'} not finished:</strong>
               <div style={{ marginTop: 6 }}>
-                {getWarnings().map(p => <div key={p.id}>#{p.race_number} {p.first_name} {p.last_name}</div>)}
+                {getWarnings().map((entry, i) => (
+                  <div key={i}>{entryLabel(entry)}</div>
+                ))}
               </div>
             </div>
           )}
@@ -444,8 +496,8 @@ export default function AdultTiming() {
       {confirm?.type === 'goback' && (
         <ConfirmModal
           title="Undo Last Action?"
-          message={`Remove the most recent timing entry for ${confirm.p.first_name} ${confirm.p.last_name}?`}
-          onConfirm={() => goBack(confirm.p)}
+          message={`Remove the most recent timing entry for ${entryLabel(confirm.entry)}?`}
+          onConfirm={() => goBack(confirm.entry)}
           onCancel={() => setConfirm(null)}
           confirmLabel="Go Back"
         />
@@ -453,8 +505,8 @@ export default function AdultTiming() {
       {confirm?.type === 'dnf' && (
         <ConfirmModal
           title="Mark as DNF?"
-          message={`Mark ${confirm.p.first_name} ${confirm.p.last_name} as Did Not Finish?`}
-          onConfirm={() => markDNF(confirm.p)}
+          message={`Mark ${entryLabel(confirm.entry)} as Did Not Finish?`}
+          onConfirm={() => markDNF(confirm.entry)}
           onCancel={() => setConfirm(null)}
           confirmLabel="Mark DNF"
           danger

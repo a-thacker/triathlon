@@ -1,5 +1,5 @@
 -- ============================================================
--- TRIATHLON TIMING APP — SUPABASE SETUP SCRIPT
+-- TRIATHLON TIMING APP — SUPABASE SETUP SCRIPT v5
 -- Run this entire file in your Supabase SQL Editor
 -- ============================================================
 
@@ -18,9 +18,7 @@ create table if not exists participants (
   received_swag_bag boolean not null default false,
   is_team boolean not null default false,
   team_color text,
-  swimmer_name text,
-  biker_name   text,
-  runner_name  text,
+  team_role text check (team_role in ('swimmer','biker','runner')),
   created_at timestamptz not null default now()
 );
 
@@ -33,7 +31,9 @@ create table if not exists race_events (
   created_at timestamptz not null default now()
 );
 
--- 3. TIMING RECORDS (one row per participant)
+-- 3. TIMING RECORDS
+-- Individual racers: one row per participant, keyed by participant_id
+-- Teams: one row per team, keyed by team_color+race_type, participant_id is null
 -- Adult stage order:
 --   swim_complete = end of swim   (starts T1)
 --   bike_start    = begin bike    (ends T1)
@@ -42,7 +42,8 @@ create table if not exists race_events (
 --   finish_time   = race finish
 create table if not exists timing_records (
   id uuid primary key default gen_random_uuid(),
-  participant_id uuid not null references participants(id) on delete cascade,
+  participant_id uuid references participants(id) on delete cascade,
+  team_color text,
   race_type text not null check (race_type in ('kids','adult')),
   swim_complete timestamptz,
   bike_start    timestamptz,
@@ -51,58 +52,39 @@ create table if not exists timing_records (
   finish_time   timestamptz,
   dnf boolean not null default false,
   created_at timestamptz not null default now(),
-  unique(participant_id)
+  -- individual racers: unique on participant_id
+  -- teams: unique on team_color+race_type
+  constraint uq_individual unique (participant_id),
+  constraint uq_team unique (team_color, race_type)
 );
 
 -- ============================================================
 -- INDEXES
 -- ============================================================
-create index if not exists idx_participants_race_type on participants(race_type);
+create index if not exists idx_participants_race_type   on participants(race_type);
 create index if not exists idx_participants_race_number on participants(race_type, race_number);
-create index if not exists idx_timing_participant on timing_records(participant_id);
-create index if not exists idx_race_events_type on race_events(race_type, event_type);
+create index if not exists idx_participants_team        on participants(team_color, race_type);
+create index if not exists idx_timing_participant       on timing_records(participant_id);
+create index if not exists idx_timing_team              on timing_records(team_color, race_type);
+create index if not exists idx_race_events_type         on race_events(race_type, event_type);
 
 -- ============================================================
--- AUTO RACE NUMBER FUNCTION
--- ============================================================
-create or replace function next_race_number(p_race_type text)
-returns integer language plpgsql as $$
-declare
-  next_num integer;
-begin
-  select coalesce(max(race_number), 0) + 1
-    into next_num
-    from participants
-   where race_type = p_race_type;
-  return next_num;
-end;
-$$;
-
--- ============================================================
--- ROW LEVEL SECURITY — disable for v1 (no auth)
+-- ROW LEVEL SECURITY — disabled for v1 (no auth)
 -- ============================================================
 alter table participants disable row level security;
-alter table race_events disable row level security;
+alter table race_events   disable row level security;
 alter table timing_records disable row level security;
 
 -- ============================================================
--- If you already ran the old schema and need to add the new
--- columns to an existing timing_records table, run these:
+-- MIGRATION: if tables already exist, run these instead:
 --
--- alter table timing_records add column if not exists bike_start timestamptz;
--- alter table timing_records add column if not exists run_start timestamptz;
--- alter table timing_records drop column if exists run_complete;
+-- alter table participants drop column if exists swimmer_name;
+-- alter table participants drop column if exists biker_name;
+-- alter table participants drop column if exists runner_name;
+-- alter table participants add column if not exists team_role text
+--   check (team_role in ('swimmer','biker','runner'));
 --
--- ============================================================
-
--- DONE — verify with:
--- select * from participants limit 1;
--- select * from race_events limit 1;
--- select * from timing_records limit 1;
-
--- ============================================================
--- MIGRATION: Add team member name columns (run if table already exists)
--- alter table participants add column if not exists swimmer_name text;
--- alter table participants add column if not exists biker_name   text;
--- alter table participants add column if not exists runner_name  text;
+-- drop table if exists timing_records;
+-- (then re-run the create table timing_records block above)
+--
 -- ============================================================

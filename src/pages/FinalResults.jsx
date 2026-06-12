@@ -11,18 +11,14 @@ function Section({ title, children }) {
   )
 }
 
-function ResultsTable({ rows, showSplits = false }) {
+function IndividualTable({ rows, showSplits = false }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0 }}>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>#</th>
-              <th>Name</th>
-              <th>Age</th>
-              <th>Gender</th>
+              <th>Rank</th><th>#</th><th>Name</th><th>Age</th><th>Gender</th>
               {showSplits && <><th>Swim</th><th>T1</th><th>Bike</th><th>T2</th><th>Run</th></>}
               <th>Total</th>
             </tr>
@@ -31,7 +27,7 @@ function ResultsTable({ rows, showSplits = false }) {
             {rows.map((r, i) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 800 }}>{i + 1}</td>
-                <td className="font-bold text-accent">{r.raceNumber}</td>
+                <td className="font-bold text-accent">#{r.raceNumber}</td>
                 <td className="font-bold">{r.name}</td>
                 <td>{r.age}</td>
                 <td style={{ textTransform: 'capitalize' }}>{r.gender}</td>
@@ -45,9 +41,7 @@ function ResultsTable({ rows, showSplits = false }) {
                 <td style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--accent)' }}>{formatDuration(r.totalMs)}</td>
               </tr>
             ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={11} className="text-muted" style={{ padding: '16px' }}>No results yet.</td></tr>
-            )}
+            {rows.length === 0 && <tr><td colSpan={11} className="text-muted" style={{ padding: 16 }}>No results yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -55,44 +49,34 @@ function ResultsTable({ rows, showSplits = false }) {
   )
 }
 
-function TeamsTable({ teams }) {
+function TeamsTable({ rows }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0 }}>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>#</th>
-              <th>Team</th>
-              <th>Swim</th>
-              <th>T1</th>
-              <th>Bike</th>
-              <th>T2</th>
-              <th>Run</th>
-              <th>Total</th>
+              <th>Rank</th><th>#(s)</th><th>Team</th><th>Swim</th><th>T1</th><th>Bike</th><th>T2</th><th>Run</th><th>Total</th>
             </tr>
           </thead>
           <tbody>
-            {teams.map((t, i) => (
-              <tr key={t.id}>
+            {rows.map((r, i) => (
+              <tr key={r.id}>
                 <td style={{ fontWeight: 800 }}>{i + 1}</td>
-                <td className="font-bold text-accent">{t.raceNumber}</td>
+                <td className="font-bold text-accent" style={{ fontSize: '0.82rem' }}>{r.raceNumbers}</td>
                 <td>
-                  <span style={teamColorStyle(t.teamColor)}>{t.teamLabel}</span>
-                  <span style={{ marginLeft: 8 }}>{t.name}</span>
+                  <span style={teamColorStyle(r.teamColor)}>{r.teamLabel}</span>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: 2 }}>{r.memberNames}</div>
                 </td>
-                <td style={{ fontFamily: 'monospace' }}>{formatDuration(t.swimMs)}</td>
-                <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{formatDuration(t.t1Ms)}</td>
-                <td style={{ fontFamily: 'monospace' }}>{formatDuration(t.bikeMs)}</td>
-                <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{formatDuration(t.t2Ms)}</td>
-                <td style={{ fontFamily: 'monospace' }}>{formatDuration(t.runMs)}</td>
-                <td style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--accent)' }}>{formatDuration(t.totalMs)}</td>
+                <td style={{ fontFamily: 'monospace' }}>{formatDuration(r.swimMs)}</td>
+                <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{formatDuration(r.t1Ms)}</td>
+                <td style={{ fontFamily: 'monospace' }}>{formatDuration(r.bikeMs)}</td>
+                <td style={{ fontFamily: 'monospace', color: 'var(--muted)' }}>{formatDuration(r.t2Ms)}</td>
+                <td style={{ fontFamily: 'monospace' }}>{formatDuration(r.runMs)}</td>
+                <td style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--accent)' }}>{formatDuration(r.totalMs)}</td>
               </tr>
             ))}
-            {teams.length === 0 && (
-              <tr><td colSpan={9} className="text-muted" style={{ padding: '16px' }}>No team results yet.</td></tr>
-            )}
+            {rows.length === 0 && <tr><td colSpan={9} className="text-muted" style={{ padding: 16 }}>No team results yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -100,60 +84,100 @@ function TeamsTable({ teams }) {
   )
 }
 
-export default function FinalResults() {
-  const [kidsResults, setKidsResults] = useState([])
-  const [adultResults, setAdultResults] = useState([])
-  const [loading, setLoading] = useState(true)
+async function loadResults() {
+  // Kids
+  const { data: kEv } = await supabase.from('race_events').select('ts')
+    .eq('race_type', 'kids').eq('event_type', 'start')
+    .order('ts', { ascending: false }).limit(1)
+  const kStart = kEv?.[0]?.ts || null
 
-  useEffect(() => { load() }, [])
+  const { data: kTiming } = await supabase.from('timing_records').select('*, participants(*)')
+    .eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
-  async function load() {
-    // Kids
-    const { data: kEv } = await supabase.from('race_events').select('ts').eq('race_type', 'kids').eq('event_type', 'start').order('ts', { ascending: false }).limit(1)
-    const kStart = kEv?.[0]?.ts || null
-    const { data: kTiming } = await supabase.from('timing_records').select('*, participants(*)').eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
+  const kRows = (kTiming || []).map(r => ({
+    id: r.id,
+    raceNumber: r.participants?.race_number,
+    name: `${r.participants?.first_name} ${r.participants?.last_name}`,
+    age: r.participants?.age,
+    gender: r.participants?.gender,
+    totalMs: diffMs(kStart, r.finish_time),
+  })).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 
-    const kRows = (kTiming || []).map(r => ({
+  // Adults — start time
+  const { data: aEv } = await supabase.from('race_events').select('ts')
+    .eq('race_type', 'adult').eq('event_type', 'start')
+    .order('ts', { ascending: false }).limit(1)
+  const aStart = aEv?.[0]?.ts || null
+
+  // Individual timing records (participant_id set, no team_color)
+  const { data: indTiming } = await supabase.from('timing_records')
+    .select('*, participants(*)')
+    .eq('race_type', 'adult')
+    .not('finish_time', 'is', null)
+    .eq('dnf', false)
+    .not('participant_id', 'is', null)
+    .is('team_color', null)
+
+  const indRows = (indTiming || []).map(r => {
+    const splits = calcAdultSplits(r, aStart)
+    return {
       id: r.id,
       raceNumber: r.participants?.race_number,
       name: `${r.participants?.first_name} ${r.participants?.last_name}`,
       age: r.participants?.age,
       gender: r.participants?.gender,
-      totalMs: diffMs(kStart, r.finish_time),
-    })).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
-    setKidsResults(kRows)
+      ...splits,
+    }
+  }).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 
-    // Adults
-    const { data: aEv } = await supabase.from('race_events').select('ts').eq('race_type', 'adult').eq('event_type', 'start').order('ts', { ascending: false }).limit(1)
-    const aStart = aEv?.[0]?.ts || null
-    const { data: aTiming } = await supabase.from('timing_records').select('*, participants(*)').eq('race_type', 'adult').not('finish_time', 'is', null).eq('dnf', false)
+  // Team timing records (team_color set)
+  const { data: teamTiming } = await supabase.from('timing_records')
+    .select('*')
+    .eq('race_type', 'adult')
+    .not('finish_time', 'is', null)
+    .eq('dnf', false)
+    .not('team_color', 'is', null)
 
-    const aRows = (aTiming || []).map(r => {
-      const splits = calcAdultSplits(r, aStart)
-      return {
-        id: r.id,
-        raceNumber: r.participants?.race_number,
-        name: `${r.participants?.first_name} ${r.participants?.last_name}`,
-        age: r.participants?.age,
-        gender: r.participants?.gender,
-        isTeam: r.participants?.is_team,
-        teamColor: r.participants?.team_color,
-        ...splits,
-      }
-    }).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
-    setAdultResults(aRows)
-    setLoading(false)
+  const teamColors = (teamTiming || []).map(r => r.team_color)
+  let teamMembersMap = {}
+  if (teamColors.length > 0) {
+    const { data: tmData } = await supabase.from('participants').select('*')
+      .in('team_color', teamColors).eq('race_type', 'adult').order('team_role')
+    if (tmData) tmData.forEach(p => {
+      if (!teamMembersMap[p.team_color]) teamMembersMap[p.team_color] = []
+      teamMembersMap[p.team_color].push(p)
+    })
   }
 
-  if (loading) return <div className="text-muted">Loading...</div>
+  const teamRows = (teamTiming || []).map(r => {
+    const splits = calcAdultSplits(r, aStart)
+    const members = teamMembersMap[r.team_color] || []
+    return {
+      id: r.id,
+      teamColor: r.team_color,
+      teamLabel: TEAM_COLORS.find(c => c.value === r.team_color)?.label || 'Team',
+      raceNumbers: members.map(m => `#${m.race_number}`).join(', '),
+      memberNames: members.map(m => `${m.first_name} ${m.last_name}`).join(' / '),
+      ...splits,
+    }
+  }).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 
-  const individualsOnly = adultResults.filter(r => !r.isTeam)
-  const teams = adultResults
-    .filter(r => r.isTeam)
-    .map(r => ({
-      ...r,
-      teamLabel: TEAM_COLORS.find(c => c.value === r.teamColor)?.label || 'Team',
-    }))
+  return { kRows, indRows, teamRows }
+}
+
+export default function FinalResults() {
+  const [kids, setKids]   = useState([])
+  const [ind, setInd]     = useState([])
+  const [teams, setTeams] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadResults().then(({ kRows, indRows, teamRows }) => {
+      setKids(kRows); setInd(indRows); setTeams(teamRows); setLoading(false)
+    })
+  }, [])
+
+  if (loading) return <div className="text-muted">Loading...</div>
 
   return (
     <div>
@@ -161,23 +185,19 @@ export default function FinalResults() {
       <div className="page-sub">Official race results</div>
 
       <Section title="Kids Race — Top 3 Overall">
-        <ResultsTable rows={kidsResults.slice(0, 3)} />
+        <IndividualTable rows={kids.slice(0, 3)} />
       </Section>
-
       <Section title="Adult Race — Top 3 Overall">
-        <ResultsTable rows={individualsOnly.slice(0, 3)} showSplits />
+        <IndividualTable rows={ind.slice(0, 3)} showSplits />
       </Section>
-
       <Section title="Adult Race — Top 3 Men">
-        <ResultsTable rows={individualsOnly.filter(r => r.gender === 'male').slice(0, 3)} showSplits />
+        <IndividualTable rows={ind.filter(r => r.gender === 'male').slice(0, 3)} showSplits />
       </Section>
-
       <Section title="Adult Race — Top 3 Women">
-        <ResultsTable rows={individualsOnly.filter(r => r.gender === 'female').slice(0, 3)} showSplits />
+        <IndividualTable rows={ind.filter(r => r.gender === 'female').slice(0, 3)} showSplits />
       </Section>
-
       <Section title="Team Results">
-        <TeamsTable teams={teams} />
+        <TeamsTable rows={teams} />
       </Section>
     </div>
   )
