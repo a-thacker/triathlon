@@ -24,6 +24,7 @@ export default function AdultTiming() {
   const [raceEnded, setRaceEnded]       = useState(false)
   const [loading, setLoading]           = useState(true)
   const [searchVal, setSearchVal]       = useState('')
+  const [statusFilter, setStatusFilter]  = useState('all')
   const [confirm, setConfirm]           = useState(null)
   const [now, setNow]                   = useState(Date.now())
   const searchRef = useRef()
@@ -147,8 +148,29 @@ export default function AdultTiming() {
 
   const q = searchVal.trim()
   const allEntries = buildEntries(participants)
-  const displayEntries = q ? allEntries.filter(e => matchesSearch(e, q)) : allEntries
-  const exactEntry = findExactEntry(allEntries, q)
+
+  const STATUS_LABELS = {
+    all:       null,
+    swimming:  'Swimming',
+    t1:        'In T1',
+    biking:    'Biking',
+    t2:        'In T2',
+    running:   'Running',
+    finished:  'Finished',
+    dnf:       'DNF',
+  }
+
+  function entryMatchesStatus(entry) {
+    if (statusFilter === 'all') return true
+    const rec = recForEntry(entry)
+    const status = adultStatusLabel(rec, !!raceStart)
+    return status === STATUS_LABELS[statusFilter]
+  }
+
+  const displayEntries = allEntries
+    .filter(e => !q || matchesSearch(e, q))
+    .filter(e => entryMatchesStatus(e))
+  const exactEntry = q ? findExactEntry(allEntries, q) : null
 
   // Get timing record for an entry
   function recForEntry(entry) {
@@ -305,20 +327,37 @@ export default function AdultTiming() {
 
       {/* Search */}
       <div className="timing-search">
-        <input
-          ref={searchRef}
-          className="form-input"
-          placeholder="Race number, name, or team color..."
-          value={searchVal}
-          onChange={e => setSearchVal(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && exactEntry && raceStart && !raceEnded) {
-              const rec = recForEntry(exactEntry)
-              const next = nextAdultAction(rec)
-              if (next) applyCheckpoint(exactEntry, next.field)
-            }
-          }}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            ref={searchRef}
+            className="form-input"
+            style={{ flex: 1 }}
+            placeholder="Race number, name, or team color..."
+            value={searchVal}
+            onChange={e => setSearchVal(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && exactEntry && raceStart && !raceEnded) {
+                const rec = recForEntry(exactEntry)
+                const next = nextAdultAction(rec)
+                if (next) applyCheckpoint(exactEntry, next.field)
+              }
+            }}
+          />
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            style={{ background: 'var(--surface)', border: '2px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', padding: '14px 12px', fontSize: '1rem', cursor: 'pointer', flexShrink: 0 }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="swimming">Swimming</option>
+            <option value="t1">In T1</option>
+            <option value="biking">Biking</option>
+            <option value="t2">In T2</option>
+            <option value="running">Running</option>
+            <option value="finished">Finished</option>
+            <option value="dnf">DNF</option>
+          </select>
+        </div>
         {raceStart && (
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 6 }}>
             Press Enter to record next checkpoint for exact number match

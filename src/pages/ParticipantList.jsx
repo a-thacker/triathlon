@@ -175,6 +175,7 @@ export default function ParticipantList() {
                   <th>Age</th>
                   <th>Gender</th>
                   <th>Team</th>
+                  <th>Size</th>
                   <th>Registered</th>
                   <th>Paid</th>
                   <th>Checked In</th>
@@ -202,6 +203,11 @@ export default function ParticipantList() {
                           </span>
                         : <span className="text-muted text-sm">—</span>
                       }
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: p.tshirt_size ? 'var(--text)' : 'var(--muted)' }}>
+                        {p.tshirt_size || '—'}
+                      </span>
                     </td>
                     <td style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                       {p.registration_date ? new Date(p.registration_date).toLocaleDateString() : '—'}

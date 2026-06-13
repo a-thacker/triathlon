@@ -451,63 +451,199 @@ function SectionLabel({ children }) {
 // ── Tabs ──────────────────────────────────────────────────────
 
 function KidsTab() {
-  const [rows, setRows]           = useState([])
-  const [loading, setLoading]     = useState(true)
+  const [rows, setRows]             = useState([])
+  const [raceStart, setRaceStart]   = useState(null)
+  const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
     refresh()
-    const t = setInterval(refresh, 10000)
-    return () => clearInterval(t)
+    const data  = setInterval(refresh, 10000)
+    const clock = setInterval(() => setNow(Date.now()), 1000)
+    return () => { clearInterval(data); clearInterval(clock) }
   }, [])
 
   async function refresh() {
+    const { data: evData } = await supabase.from('race_events').select('ts')
+      .eq('race_type', 'kids').eq('event_type', 'start')
+      .order('ts', { ascending: false }).limit(1)
+    const startTs = evData?.[0]?.ts || null
+    setRaceStart(startTs)
     const data = await fetchKidsLive()
     setRows(data); setLoading(false); setLastUpdate(new Date())
   }
 
+  const elapsedMs = raceStart ? now - new Date(raceStart).getTime() : null
   if (loading) return <EmptyState message="Loading..." />
-  if (rows.length === 0) return <EmptyState message="No finishers yet. Check back soon!" />
 
   return (
     <div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 16, textAlign: 'right' }}>
-        Updated {lastUpdate?.toLocaleTimeString()}
+      {elapsedMs != null && (
+        <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+          <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '2rem', color: 'var(--kids-color)' }}>
+            {formatDuration(elapsedMs)}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+            Race time · started {new Date(raceStart).toLocaleTimeString()}
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginBottom: 12, textAlign: 'right' }}>
+        {lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString()}` : ''}
       </div>
-      {rows.map((row, i) => <KidsResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'kids', rows, [], [])} />)}
+      {rows.length === 0
+        ? <EmptyState message="No finishers yet. Check back soon!" />
+        : rows.map((row, i) => <KidsResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'kids', rows, [], [])} />)
+      }
     </div>
   )
 }
 
+const STATUS_ORDER_PUB = ['Swimming', 'In T1', 'Biking', 'In T2', 'Running', 'Finished']
+
+function deriveStatusPub(rec, raceStarted) {
+  if (!raceStarted || !rec) return raceStarted ? 'Swimming' : null
+  if (rec.dnf) return 'DNF'
+  if (rec.finish_time)   return 'Finished'
+  if (rec.run_start)     return 'Running'
+  if (rec.bike_complete) return 'In T2'
+  if (rec.bike_start)    return 'Biking'
+  if (rec.swim_complete) return 'In T1'
+  return 'Swimming'
+}
+
 function AdultTab() {
-  const [rows, setRows]           = useState([])
-  const [loading, setLoading]     = useState(true)
+  const [allRows, setAllRows]       = useState([])
+  const [raceStart, setRaceStart]   = useState(null)
+  const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
     refresh()
-    const t = setInterval(refresh, 10000)
-    return () => clearInterval(t)
+    const data  = setInterval(refresh, 10000)
+    const clock = setInterval(() => setNow(Date.now()), 1000)
+    return () => { clearInterval(data); clearInterval(clock) }
   }, [])
 
   async function refresh() {
-    const data = await fetchAdultLive()
-    setRows(data); setLoading(false); setLastUpdate(new Date())
+    // Fetch race start
+    const { data: evData } = await supabase.from('race_events').select('ts')
+      .eq('race_type', 'adult').eq('event_type', 'start')
+      .order('ts', { ascending: false }).limit(1)
+    const startTs = evData?.[0]?.ts || null
+    setRaceStart(startTs)
+
+    // Fetch ALL timing records (not just finished)
+    const { data: tData } = await supabase.from('timing_records').select('*').eq('race_type', 'adult')
+    if (!tData) { setLoading(false); return }
+
+    const individualIds = tData.filter(r => r.participant_id && !r.team_color).map(r => r.participant_id)
+    const teamColors    = tData.filter(r => r.team_color).map(r => r.team_color)
+
+    let pMap = {}
+    if (individualIds.length > 0) {
+      const { data } = await supabase.from('participants').select('*').in('id', individualIds)
+      if (data) data.forEach(p => { pMap[p.id] = p })
+    }
+    let teamMap = {}
+    if (teamColors.length > 0) {
+      const { data } = await supabase.from('participants').select('*')
+        .in('team_color', teamColors).eq('race_type', 'adult')
+      if (data) data.forEach(p => {
+        if (!teamMap[p.team_color]) teamMap[p.team_color] = []
+        teamMap[p.team_color].push(p)
+      })
+    }
+
+    const built = tData.map(r => {
+      const splits = calcAdultSplits(r, startTs)
+      const status = deriveStatusPub(r, !!startTs)
+      if (r.team_color) {
+        const members = teamMap[r.team_color] || []
+        const colorLabel = TEAM_COLORS.find(c => c.value === r.team_color)?.label || 'Team'
+        return { id: r.id, isTeam: true, status, teamColor: r.team_color,
+          name: `${colorLabel} Team`, subName: members.map(m => m.first_name).join(' / '),
+          raceNumbers: members.map(m => `#${m.race_number}`).join(' '),
+          gender: null, age: null, ...splits }
+      }
+      const p = pMap[r.participant_id] || {}
+      return { id: r.id, isTeam: false, status,
+        name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+        raceNumber: p.race_number, gender: p.gender, age: p.age, ...splits }
+    })
+    setAllRows(built)
+    setLoading(false)
+    setLastUpdate(new Date())
   }
 
+  const elapsedMs = raceStart ? now - new Date(raceStart).getTime() : null
+  const indAll  = allRows.filter(r => !r.isTeam)
+  const teamAll = allRows.filter(r => r.isTeam)
+  const finishedRows = allRows.filter(r => r.status === 'Finished').sort((a,b) => (a.totalMs??Infinity)-(b.totalMs??Infinity))
+
+  const displayed = statusFilter === 'all' ? null : allRows.filter(r => r.status === statusFilter)
+  const grouped = STATUS_ORDER_PUB.reduce((acc, s) => {
+    const m = allRows.filter(r => r.status === s)
+    if (m.length > 0) acc[s] = m
+    return acc
+  }, {})
+
+  const sel = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', padding: '8px 12px', fontSize: '0.82rem', cursor: 'pointer', width: '100%' }
+
   if (loading) return <EmptyState message="Loading..." />
-  if (rows.length === 0) return <EmptyState message="No finishers yet. Check back soon!" />
 
   return (
     <div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 16, textAlign: 'right' }}>
-        Updated {lastUpdate?.toLocaleTimeString()}
+      {/* Race timer */}
+      {elapsedMs != null && (
+        <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+          <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '2rem', color: 'var(--accent)' }}>
+            {formatDuration(elapsedMs)}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+            Race time · started {new Date(raceStart).toLocaleTimeString()}
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginBottom: 10, textAlign: 'right' }}>
+        {lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString()}` : ''}
       </div>
-      {rows.map((row, i) => {
-        const indAll = rows.filter(r => !r.isTeam)
-        const teamAll = rows.filter(r => r.isTeam)
-        return <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indAll, teamAll)} />
-      })}
+
+      {/* Status filter */}
+      {allRows.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <select style={sel} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="all">All ({allRows.length})</option>
+            {STATUS_ORDER_PUB.map(s => {
+              const count = allRows.filter(r => r.status === s).length
+              return count > 0 ? <option key={s} value={s}>{s} ({count})</option> : null
+            })}
+          </select>
+        </div>
+      )}
+
+      {allRows.length === 0 ? (
+        <EmptyState message="No timing data yet. Check back soon!" />
+      ) : statusFilter !== 'all' ? (
+        displayed.length === 0
+          ? <EmptyState message="Nobody in this status right now." />
+          : displayed.map((row, i) => (
+              <AdultResultCard key={row.id} rank={row.status === 'Finished' ? finishedRows.indexOf(row) + 1 : null} row={row} placements={computePlacements(row, 'adult', [], indAll, teamAll)} />
+            ))
+      ) : (
+        STATUS_ORDER_PUB.map(s => grouped[s] ? (
+          <div key={s}>
+            <SectionLabel>{s} ({grouped[s].length})</SectionLabel>
+            {grouped[s].map((row, i) => (
+              <AdultResultCard key={row.id} rank={s === 'Finished' ? i + 1 : null} row={row} placements={computePlacements(row, 'adult', [], indAll, teamAll)} />
+            ))}
+          </div>
+        ) : null)
+      )}
     </div>
   )
 }

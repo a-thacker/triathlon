@@ -19,6 +19,7 @@ create table if not exists participants (
   is_team boolean not null default false,
   team_color text,
   team_role text check (team_role in ('swimmer','biker','runner')),
+  tshirt_size text,
   created_at timestamptz not null default now()
 );
 
@@ -82,6 +83,7 @@ alter table timing_records disable row level security;
 -- alter table participants drop column if exists biker_name;
 -- alter table participants drop column if exists runner_name;
 -- alter table participants add column if not exists team_role text
+-- alter table participants add column if not exists tshirt_size text;
 --   check (team_role in ('swimmer','biker','runner'));
 --
 -- drop table if exists timing_records;

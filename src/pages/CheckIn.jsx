@@ -217,6 +217,7 @@ export default function CheckIn() {
                   <th>Race</th>
                   <th>Age</th>
                   <th>Team</th>
+                  <th>Size</th>
                   <th>Check In</th>
                   <th>Paid</th>
                   <th>Swag Bag</th>
@@ -245,6 +246,15 @@ export default function CheckIn() {
                           </span>
                         : '—'
                       }
+                    </td>
+                    <td>
+                      <span style={{
+                        background: 'var(--surface2)', borderRadius: 6,
+                        padding: '3px 8px', fontSize: '0.82rem', fontWeight: 700,
+                        color: p.tshirt_size ? 'var(--text)' : 'var(--muted)',
+                      }}>
+                        {p.tshirt_size || '—'}
+                      </span>
                     </td>
                     <td>
                       <button

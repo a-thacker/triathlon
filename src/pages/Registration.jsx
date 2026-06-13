@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { TEAM_COLORS } from '../lib/utils'
 
+const TSHIRT_SIZES = ['YS', 'YM', 'YL', 'YXL', 'S', 'M', 'L', 'XL']
+
 const BLANK = {
   first_name: '',
   last_name: '',
@@ -11,6 +13,7 @@ const BLANK = {
   race_type: 'adult',
   paid: false,
   received_swag_bag: false,
+  tshirt_size: '',
   is_team: false,
   team_color: '',
   team_role: 'swimmer',
@@ -40,6 +43,7 @@ export default function Registration() {
       race_type: data.race_type,
       paid: data.paid,
       received_swag_bag: data.received_swag_bag,
+      tshirt_size: data.tshirt_size ?? '',
       is_team: data.is_team,
       team_color: data.team_color ?? '',
       team_role: data.team_role ?? 'swimmer',
@@ -50,11 +54,26 @@ export default function Registration() {
     setForm(f => ({ ...f, [field]: value }))
   }
 
-  async function getNextRaceNumber(race_type) {
+  // For individuals: next available number in race_type
+  // For teams: look up existing team color number, or assign next available
+  async function getNextRaceNumber(race_type, is_team, team_color) {
+    if (is_team && team_color) {
+      // Check if someone on this team+race already has a number
+      const { data: existing } = await supabase
+        .from('participants')
+        .select('race_number')
+        .eq('race_type', race_type)
+        .eq('team_color', team_color)
+        .limit(1)
+      if (existing && existing.length > 0) return existing[0].race_number
+    }
+    // Next available number for this race_type
     const { data } = await supabase
-      .from('participants').select('race_number')
+      .from('participants')
+      .select('race_number')
       .eq('race_type', race_type)
-      .order('race_number', { ascending: false }).limit(1)
+      .order('race_number', { ascending: false })
+      .limit(1)
     return data && data.length > 0 ? data[0].race_number + 1 : 1
   }
 
@@ -76,7 +95,7 @@ export default function Registration() {
       return
     }
     if (form.is_team && !form.team_role) {
-      setError('Please select this person\'s role on the team.')
+      setError("Please select this person's role on the team.")
       return
     }
 
@@ -90,6 +109,7 @@ export default function Registration() {
       race_type: form.race_type,
       paid: form.paid,
       received_swag_bag: form.received_swag_bag,
+      tshirt_size: form.tshirt_size || null,
       is_team: form.is_team,
       team_color: form.is_team ? form.team_color : null,
       team_role:  form.is_team ? form.team_role  : null,
@@ -101,7 +121,7 @@ export default function Registration() {
       if (err) { setError(err.message); return }
       setSuccess('Participant updated.')
     } else {
-      const race_number = await getNextRaceNumber(form.race_type)
+      const race_number = await getNextRaceNumber(form.race_type, form.is_team, form.team_color)
       const { error: err } = await supabase.from('participants').insert({
         ...payload,
         race_number,
@@ -155,14 +175,23 @@ export default function Registration() {
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Race Type</label>
-            <select className="form-select" value={form.race_type}
-              onChange={e => set('race_type', e.target.value)} disabled={isEdit}>
-              <option value="adult">Adult Race</option>
-              <option value="kids">Kids Race</option>
-            </select>
-            {isEdit && <p className="text-muted text-sm" style={{ marginTop: 4 }}>Race type cannot be changed after registration.</p>}
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Race Type</label>
+              <select className="form-select" value={form.race_type}
+                onChange={e => set('race_type', e.target.value)} disabled={isEdit}>
+                <option value="adult">Adult Race</option>
+                <option value="kids">Kids Race</option>
+              </select>
+              {isEdit && <p className="text-muted text-sm" style={{ marginTop: 4 }}>Cannot change after registration.</p>}
+            </div>
+            <div className="form-group">
+              <label className="form-label">T-Shirt Size</label>
+              <select className="form-select" value={form.tshirt_size} onChange={e => set('tshirt_size', e.target.value)}>
+                <option value="">— Select size —</option>
+                {TSHIRT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="form-row" style={{ marginBottom: 12 }}>
@@ -219,7 +248,7 @@ export default function Registration() {
                       <option value="runner">Runner</option>
                     </select>
                     <p className="text-muted text-sm" style={{ marginTop: 6 }}>
-                      Register each team member separately with the same team color. Assign each person their leg.
+                      All members of the same team color share one race number. Register each member separately with the same color.
                     </p>
                   </div>
                 </div>
