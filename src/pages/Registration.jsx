@@ -231,7 +231,7 @@ export default function Registration() {
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Register Participant'}
             </button>
-            <button type="button" className="btn btn-ghost" onClick={() => navigate('/participants')}>
+            <button type="button" className="btn btn-ghost" onClick={() => navigate('/app/participants')}>
               Cancel
             </button>
           </div>
