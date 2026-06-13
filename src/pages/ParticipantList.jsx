@@ -103,7 +103,7 @@ export default function ParticipantList() {
                     <td><span className={`badge badge-${p.checked_in?'yes':'no'}`}>{p.checked_in?'Yes':'No'}</span></td>
                     <td><span className={`badge badge-${p.received_swag_bag?'yes':'no'}`}>{p.received_swag_bag?'Yes':'No'}</span></td>
                     <td>
-                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/register/${p.id}`)}>Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/app/register/${p.id}`)}>Edit</button>
                     </td>
                   </tr>
                 ))}
