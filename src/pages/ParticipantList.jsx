@@ -36,7 +36,7 @@ export default function ParticipantList() {
     <div>
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6}}>
         <div className="page-title">Participants</div>
-        <button className="btn btn-primary" onClick={() => navigate('/register')}>+ New</button>
+        <button className="btn btn-primary" onClick={() => navigate('/app/register')}>+ New</button>
       </div>
       <div className="page-sub">{participants.length} total registered</div>
 
