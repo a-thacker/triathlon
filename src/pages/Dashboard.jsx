@@ -75,9 +75,9 @@ export default function Dashboard() {
       </div>
 
       <div style={{display:'flex', gap:'12px', flexWrap:'wrap'}}>
-        <Link to="/checkin" className="btn btn-primary btn-lg">Go to Check-In</Link>
-        <Link to="/timing/kids" className="btn btn-ghost btn-lg">Kids Timing</Link>
-        <Link to="/timing/adult" className="btn btn-ghost btn-lg">Adult Timing</Link>
+        <Link to="/app/checkin" className="btn btn-primary btn-lg">Go to Check-In</Link>
+        <Link to="/app/timing/kids" className="btn btn-ghost btn-lg">Kids Timing</Link>
+        <Link to="/app/timing/adult" className="btn btn-ghost btn-lg">Adult Timing</Link>
       </div>
     </div>
   )

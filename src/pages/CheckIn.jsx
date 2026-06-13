@@ -168,7 +168,7 @@ export default function CheckIn() {
                       </button>
                     </td>
                     <td>
-                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/register/${p.id}`)}>Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/app/register/${p.id}`)}>Edit</button>
                     </td>
                   </tr>
                 ))}
