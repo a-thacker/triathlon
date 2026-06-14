@@ -17,6 +17,7 @@ import AdultTiming    from './pages/AdultTiming'
 import LiveResultsKids   from './pages/LiveResultsKids'
 import LiveResultsAdult  from './pages/LiveResultsAdult'
 import FinalResults   from './pages/FinalResults'
+import EditTimes      from './pages/EditTimes'
 import PrintResults   from './pages/PrintResults'
 
 function Sidebar({ collapsed, onToggle }) {
@@ -72,6 +73,7 @@ function Sidebar({ collapsed, onToggle }) {
           <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/live/adult">Live — Adult</NavLink>
           <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/final">Final Results</NavLink>
           <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/print">Print</NavLink>
+        <NavLink className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/app/results/edit-times">Edit Times</NavLink>
         </nav>
       )}
 
@@ -102,6 +104,7 @@ function OrganizerLayout() {
           <Route path="results/live/adult"   element={<LiveResultsAdult />} />
           <Route path="results/final"        element={<FinalResults />} />
           <Route path="results/print"        element={<PrintResults />} />
+          <Route path="results/edit-times"  element={<EditTimes />} />
         </Routes>
       </main>
     </div>

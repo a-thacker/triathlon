@@ -35,7 +35,23 @@ export default function AdultTiming() {
     return () => clearInterval(t)
   }, [])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Poll timing records every 10s to stay in sync with a second operator device
+    const poll = setInterval(async () => {
+      const { data } = await supabase
+        .from('timing_records').select('*').eq('race_type', 'adult')
+      if (data) {
+        const tMap = {}
+        data.forEach(r => {
+          if (r.team_color) tMap[`team:${r.team_color}`] = r
+          else if (r.participant_id) tMap[r.participant_id] = r
+        })
+        setTimingMap(tMap)
+      }
+    }, 10000)
+    return () => clearInterval(poll)
+  }, [])
 
   async function load() {
     const { data: pData } = await supabase

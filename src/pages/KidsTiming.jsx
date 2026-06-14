@@ -22,7 +22,20 @@ export default function KidsTiming() {
     return () => clearInterval(t)
   }, [])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Poll timing records every 10s to stay in sync with a second operator device
+    const poll = setInterval(async () => {
+      const { data } = await supabase
+        .from('timing_records').select('*').eq('race_type', 'kids')
+      if (data) {
+        const tMap = {}
+        data.forEach(r => { tMap[r.participant_id] = r })
+        setTimingRecords(tMap)
+      }
+    }, 10000)
+    return () => clearInterval(poll)
+  }, [])
 
   async function load() {
     // Load participants
