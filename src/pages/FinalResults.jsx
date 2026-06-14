@@ -264,15 +264,23 @@ export default function FinalResults() {
       <Section title="Kids Race — Top 3 Overall">
         <IndividualTable rows={kids.slice(0, 3)} />
       </Section>
-      <Section title="Adult Race — Top 3 Overall">
-        <IndividualTable rows={ind.slice(0, 3)} showSplits />
-      </Section>
-      <Section title="Adult Race — Top 3 Men">
-        <IndividualTable rows={ind.filter(r => r.gender === 'male').slice(0, 3)} showSplits />
-      </Section>
-      <Section title="Adult Race — Top 3 Women">
-        <IndividualTable rows={ind.filter(r => r.gender === 'female').slice(0, 3)} showSplits />
-      </Section>
+      {(() => {
+        const top3Overall = ind.slice(0, 3)
+        const top3OverallIds = new Set(top3Overall.map(r => r.id))
+        const top3Men   = ind.filter(r => r.gender === 'male'   && !top3OverallIds.has(r.id)).slice(0, 3)
+        const top3Women = ind.filter(r => r.gender === 'female' && !top3OverallIds.has(r.id)).slice(0, 3)
+        return (<>
+          <Section title="Adult Race — Top 3 Overall">
+            <IndividualTable rows={top3Overall} showSplits />
+          </Section>
+          <Section title="Adult Race — Top 3 Men">
+            <IndividualTable rows={top3Men} showSplits />
+          </Section>
+          <Section title="Adult Race — Top 3 Women">
+            <IndividualTable rows={top3Women} showSplits />
+          </Section>
+        </>)
+      })()}
       <Section title="Team Results">
         <TeamsTable rows={teams} />
       </Section>

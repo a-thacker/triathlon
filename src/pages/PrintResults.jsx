@@ -129,8 +129,13 @@ export default function PrintResults() {
       <div style={{ pageBreakBefore: 'always' }} />
 
       <PrintTable title="Adult Race — Overall Results (Individuals)" rows={individualsOnly} showSplits />
-      <PrintTable title="Adult Race — Men's Results" rows={individualsOnly.filter(r => r.gender === 'male')} showSplits />
-      <PrintTable title="Adult Race — Women's Results" rows={individualsOnly.filter(r => r.gender === 'female')} showSplits />
+      {(() => {
+        const top3Ids = new Set(individualsOnly.slice(0, 3).map(r => r.id))
+        return (<>
+          <PrintTable title="Adult Race — Men's Results" rows={individualsOnly.filter(r => r.gender === 'male' && !top3Ids.has(r.id))} showSplits />
+          <PrintTable title="Adult Race — Women's Results" rows={individualsOnly.filter(r => r.gender === 'female' && !top3Ids.has(r.id))} showSplits />
+        </>)
+      })()}
 
       {/* Teams */}
       {teams.length > 0 && (

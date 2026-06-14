@@ -695,24 +695,31 @@ function FinalTab({ settings }) {
 
       {settings.adults_results_released && (
         <>
-          {top3All.length > 0 && (
-            <>
-              <SectionLabel>Adults — Top 3 Overall</SectionLabel>
-              {top3All.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
-            </>
-          )}
-          {top3Men.length > 0 && (
-            <>
-              <SectionLabel>Adults — Top 3 Men</SectionLabel>
-              {top3Men.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
-            </>
-          )}
-          {top3Women.length > 0 && (
-            <>
-              <SectionLabel>Adults — Top 3 Women</SectionLabel>
-              {top3Women.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
-            </>
-          )}
+          {(() => {
+            const top3OverallIds = new Set(top3All.map(r => r.id))
+            const top3MenFiltered   = indRows.filter(r => r.gender === 'male'   && !top3OverallIds.has(r.id)).slice(0, 3)
+            const top3WomenFiltered = indRows.filter(r => r.gender === 'female' && !top3OverallIds.has(r.id)).slice(0, 3)
+            return (<>
+              {top3All.length > 0 && (
+                <>
+                  <SectionLabel>Adults — Top 3 Overall</SectionLabel>
+                  {top3All.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
+                </>
+              )}
+              {top3MenFiltered.length > 0 && (
+                <>
+                  <SectionLabel>Adults — Top 3 Men</SectionLabel>
+                  {top3MenFiltered.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
+                </>
+              )}
+              {top3WomenFiltered.length > 0 && (
+                <>
+                  <SectionLabel>Adults — Top 3 Women</SectionLabel>
+                  {top3WomenFiltered.map((row, i) => <AdultResultCard key={row.id} rank={i + 1} row={row} placements={computePlacements(row, 'adult', [], indRows, teamRows)} />)}
+                </>
+              )}
+            </>)
+          })()}
           {teamRows.length > 0 && (
             <>
               <SectionLabel>Teams</SectionLabel>
