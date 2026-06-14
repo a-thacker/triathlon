@@ -94,8 +94,7 @@ export const TEAM_COLORS = [
   { label: 'Purple', value: '#805ad5' },
   { label: 'Orange', value: '#dd6b20' },
   { label: 'Pink',   value: '#d53f8c' },
-  { label: 'Grey',   value: '#808080' },
+  { label: 'Teal',   value: '#319795' },
   { label: 'Black',  value: '#1a202c' },
   { label: 'White',  value: '#e2e8f0' },
-  { label: 'Brown',  value: '#5e3104' },
 ]

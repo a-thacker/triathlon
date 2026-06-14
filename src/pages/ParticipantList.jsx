@@ -192,7 +192,14 @@ export default function ParticipantList() {
                 {filtered.map(p => (
                   <tr key={p.id}>
                     <td className="font-bold text-accent">{p.race_number}</td>
-                    <td><div className="font-bold">{p.first_name} {p.last_name}</div></td>
+                    <td>
+                      <div className="font-bold">{p.first_name} {p.last_name}</div>
+                      {p.exclude_from_results && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--danger)', fontWeight: 700, marginTop: 2 }}>
+                          Excluded from results
+                        </div>
+                      )}
+                    </td>
                     <td><span className={`badge badge-${p.race_type}`}>{p.race_type}</span></td>
                     <td>{p.age}</td>
                     <td style={{ textTransform: 'capitalize' }}>{p.gender}</td>

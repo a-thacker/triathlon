@@ -26,14 +26,16 @@ async function fetchKidsLive() {
     .select('*, participants(*)')
     .eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
-  return (tData || []).map(r => ({
-    id: r.id,
-    raceNumber: r.participants?.race_number,
-    name: `${r.participants?.first_name} ${r.participants?.last_name}`,
-    age: r.participants?.age,
-    gender: r.participants?.gender,
-    totalMs: diffMs(startTs, r.finish_time),
-  })).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
+  return (tData || [])
+    .filter(r => !r.participants?.exclude_from_results)
+    .map(r => ({
+      id: r.id,
+      raceNumber: r.participants?.race_number,
+      name: `${r.participants?.first_name} ${r.participants?.last_name}`,
+      age: r.participants?.age,
+      gender: r.participants?.gender,
+      totalMs: diffMs(startTs, r.finish_time),
+    })).sort((a, b) => (a.totalMs ?? Infinity) - (b.totalMs ?? Infinity))
 }
 
 async function fetchAdultLive() {
@@ -99,7 +101,7 @@ async function fetchFinal() {
     .select('*, participants(*)').eq('race_type', 'adult')
     .not('finish_time', 'is', null).eq('dnf', false).is('team_color', null)
 
-  const indRows = (indT || []).map(r => {
+  const indRows = (indT || []).filter(r => !r.participants?.exclude_from_results).map(r => {
     const splits = calcAdultSplits(r, aStart)
     return {
       id: r.id,

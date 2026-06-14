@@ -69,7 +69,7 @@ export default function PrintResults() {
     const kStart = kEv?.[0]?.ts || null
     const { data: kTiming } = await supabase.from('timing_records').select('*, participants(*)').eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
-    const kRows = (kTiming || []).map(r => ({
+    const kRows = (kTiming || []).filter(r => !r.participants?.exclude_from_results).map(r => ({
       id: r.id,
       raceNumber: r.participants?.race_number,
       name: `${r.participants?.first_name} ${r.participants?.last_name}`,
@@ -84,7 +84,7 @@ export default function PrintResults() {
     const aStart = aEv?.[0]?.ts || null
     const { data: aTiming } = await supabase.from('timing_records').select('*, participants(*)').eq('race_type', 'adult').not('finish_time', 'is', null).eq('dnf', false)
 
-    const aRows = (aTiming || []).map(r => {
+    const aRows = (aTiming || []).filter(r => !r.participants?.exclude_from_results).map(r => {
       const splits = calcAdultSplits(r, aStart)
       return {
         id: r.id,

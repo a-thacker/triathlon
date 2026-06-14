@@ -27,7 +27,7 @@ export default function LiveResultsKids() {
       .select('*, participants(*)')
       .eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
-    const sorted = (tData || []).map(r => ({
+    const sorted = (tData || []).filter(r => !r.participants?.exclude_from_results).map(r => ({
       id: r.id,
       raceNumber: r.participants?.race_number,
       name: `${r.participants?.first_name} ${r.participants?.last_name}`,

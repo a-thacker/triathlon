@@ -95,7 +95,7 @@ async function loadResults() {
     .select('*, participants(*)')
     .eq('race_type', 'kids').not('finish_time', 'is', null).eq('dnf', false)
 
-  const kRows = (kTiming || []).map(r => ({
+  const kRows = (kTiming || []).filter(r => !r.participants?.exclude_from_results).map(r => ({
     id: r.id,
     raceNumber: r.participants?.race_number,
     name: `${r.participants?.first_name} ${r.participants?.last_name}`,
@@ -114,7 +114,7 @@ async function loadResults() {
     .eq('race_type', 'adult').not('finish_time', 'is', null).eq('dnf', false)
     .is('team_color', null)
 
-  const indRows = (indTiming || []).map(r => {
+  const indRows = (indTiming || []).filter(r => !r.participants?.exclude_from_results).map(r => {
     const splits = calcAdultSplits(r, aStart)
     return {
       id: r.id,
