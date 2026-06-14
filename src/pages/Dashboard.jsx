@@ -13,6 +13,15 @@ export default function Dashboard() {
 
     if (error) { console.error(error); return }
 
+    // Fetch timing records to count swim completions and finishers
+    const { data: timing } = await supabase
+      .from('timing_records')
+      .select('race_type, swim_complete, finish_time, dnf, team_color, participant_id')
+
+    const kidsFinished  = (timing || []).filter(t => t.race_type === 'kids' && t.finish_time && !t.dnf).length
+    const adultsSwum    = (timing || []).filter(t => t.race_type === 'adult' && t.swim_complete && !t.dnf).length
+    const adultsFinished= (timing || []).filter(t => t.race_type === 'adult' && t.finish_time && !t.dnf).length
+
     const kids = data.filter(p => p.race_type === 'kids')
     const adults = data.filter(p => p.race_type === 'adult')
 
@@ -26,6 +35,9 @@ export default function Dashboard() {
       totalCheckedIn: data.filter(p => p.checked_in).length,
       totalPaid: data.filter(p => p.paid).length,
       total: data.length,
+      kidsFinished,
+      adultsSwum,
+      adultsFinished,
     })
     setLoading(false)
   }
@@ -71,6 +83,25 @@ export default function Dashboard() {
         <div className="stat-card">
           <div className="stat-number">{stats.kidsTotal - stats.kidsPaid + stats.adultsTotal - stats.adultsPaid}</div>
           <div className="stat-label">Unpaid</div>
+        </div>
+      </div>
+
+      {/* Race progress section */}
+      <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: 10 }}>
+        Race Progress
+      </div>
+      <div className="stat-grid" style={{ marginBottom: 28 }}>
+        <div className="stat-card">
+          <div className="stat-number" style={{color:'var(--kids-color)'}}>{stats.kidsFinished ?? 0}</div>
+          <div className="stat-label">Kids Finished</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number" style={{color:'var(--adult-color)'}}>{stats.adultsSwum ?? 0}</div>
+          <div className="stat-label">Adults Swim Done</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number" style={{color:'var(--success)'}}>{stats.adultsFinished ?? 0}</div>
+          <div className="stat-label">Adults Finished</div>
         </div>
       </div>
 

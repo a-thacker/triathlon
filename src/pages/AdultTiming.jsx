@@ -119,10 +119,38 @@ export default function AdultTiming() {
     return entries
   }
 
-  // Search: match individual by number/name, team by color label or any member name/number
+  // Status keywords that can be typed into the search box
+  const STATUS_KEYWORDS = {
+    'swimming':  'Swimming',
+    'swim':      'Swimming',
+    't1':        'In T1',
+    'transition1': 'In T1',
+    'biking':    'Biking',
+    'bike':      'Biking',
+    'cycling':   'Biking',
+    't2':        'In T2',
+    'transition2': 'In T2',
+    'running':   'Running',
+    'run':       'Running',
+    'finished':  'Finished',
+    'finish':    'Finished',
+    'done':      'Finished',
+    'dnf':       'DNF',
+  }
+
+  // Search: match individual by number/name, team by color label or any member name/number, or status keyword
   function matchesSearch(entry, q) {
     if (!q) return true
-    const lower = q.toLowerCase()
+    const lower = q.toLowerCase().trim()
+
+    // Check if the query is a status keyword — if so, match by status
+    const statusTarget = STATUS_KEYWORDS[lower]
+    if (statusTarget) {
+      const rec = recForEntry(entry)
+      const status = adultStatusLabel(rec, !!raceStart)
+      return status === statusTarget
+    }
+
     if (entry.type === 'individual') {
       const p = entry.participant
       return String(p.race_number).startsWith(q) ||
@@ -332,7 +360,7 @@ export default function AdultTiming() {
             ref={searchRef}
             className="form-input"
             style={{ flex: 1 }}
-            placeholder="Race number, name, or team color..."
+            placeholder="Number, name, color, or status (e.g. swimming, t1, biking)..."
             value={searchVal}
             onChange={e => setSearchVal(e.target.value)}
             onKeyDown={e => {
@@ -360,7 +388,7 @@ export default function AdultTiming() {
         </div>
         {raceStart && (
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 6 }}>
-            Press Enter to record next checkpoint for exact number match
+            Press Enter to record next checkpoint for exact number match · Type a status to filter (swimming, t1, biking, t2, running, finished)
           </div>
         )}
       </div>
