@@ -303,6 +303,11 @@ function SaveButton({ onClick }) {
 // Compute placement strings for a row given all result sets
 function computePlacements(row, raceType, allKids, allAdultInd, allTeams) {
   const badges = []
+
+  // Never show placements for unfinished rows
+  if (row.status && row.status !== 'Finished') return badges
+  if (!row.totalMs) return badges
+
   if (raceType === 'kids') {
     const rank = allKids.findIndex(r => r.id === row.id) + 1
     if (rank >= 1 && rank <= 3) badges.push(`${ordinal(rank)} Overall`)
@@ -313,10 +318,12 @@ function computePlacements(row, raceType, allKids, allAdultInd, allTeams) {
     if (rank >= 1 && rank <= 3) badges.push(`${ordinal(rank)} Team`)
     return badges
   }
-  // Individual adult
+  // Individual adult — only finished sorted rows are passed in allAdultInd
+  const top3Ids = new Set(allAdultInd.slice(0, 3).map(r => r.id))
   const overallRank = allAdultInd.findIndex(r => r.id === row.id) + 1
   if (overallRank >= 1 && overallRank <= 3) badges.push(`${ordinal(overallRank)} Overall`)
-  const genderList = allAdultInd.filter(r => r.gender === row.gender)
+  // Gender rank excludes overall top 3
+  const genderList = allAdultInd.filter(r => r.gender === row.gender && !top3Ids.has(r.id))
   const genderRank = genderList.findIndex(r => r.id === row.id) + 1
   const gLabel = row.gender === 'male' ? 'Men' : row.gender === 'female' ? 'Women' : row.gender
   if (genderRank >= 1 && genderRank <= 3) badges.push(`${ordinal(genderRank)} ${gLabel}`)
@@ -589,8 +596,11 @@ function AdultTab() {
 
   const raceEndTs = raceEnd ? new Date(raceEnd).getTime() : null
   const elapsedMs = raceStart ? (raceEndTs || now) - new Date(raceStart).getTime() : null
-  const indAll  = allRows.filter(r => !r.isTeam)
-  const teamAll = allRows.filter(r => r.isTeam)
+  // Only finished non-DNF rows, sorted by totalMs — used for placement computation
+  const finishedInd  = allRows.filter(r => !r.isTeam && r.status === 'Finished' && r.totalMs != null).sort((a,b) => a.totalMs - b.totalMs)
+  const finishedTeam = allRows.filter(r =>  r.isTeam && r.status === 'Finished' && r.totalMs != null).sort((a,b) => a.totalMs - b.totalMs)
+  const indAll  = finishedInd
+  const teamAll = finishedTeam
   const finishedRows = allRows.filter(r => r.status === 'Finished').sort((a,b) => (a.totalMs??Infinity)-(b.totalMs??Infinity))
 
   const displayed = statusFilter === 'all' ? null : allRows.filter(r => r.status === statusFilter)
