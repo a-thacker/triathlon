@@ -455,6 +455,7 @@ function SectionLabel({ children }) {
 function KidsTab() {
   const [rows, setRows]             = useState([])
   const [raceStart, setRaceStart]   = useState(null)
+  const [raceEnd,   setRaceEnd]     = useState(null)
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [now, setNow] = useState(Date.now())
@@ -467,16 +468,18 @@ function KidsTab() {
   }, [])
 
   async function refresh() {
-    const { data: evData } = await supabase.from('race_events').select('ts')
-      .eq('race_type', 'kids').eq('event_type', 'start')
-      .order('ts', { ascending: false }).limit(1)
-    const startTs = evData?.[0]?.ts || null
-    setRaceStart(startTs)
+    const { data: evData } = await supabase.from('race_events').select('event_type, ts')
+      .eq('race_type', 'kids').order('ts', { ascending: false })
+    const startEv = (evData || []).find(e => e.event_type === 'start')
+    const endEv   = (evData || []).find(e => e.event_type === 'end')
+    setRaceStart(startEv?.ts || null)
+    setRaceEnd(endEv?.ts || null)
     const data = await fetchKidsLive()
     setRows(data); setLoading(false); setLastUpdate(new Date())
   }
 
-  const elapsedMs = raceStart ? now - new Date(raceStart).getTime() : null
+  const raceEndTs = raceEnd ? new Date(raceEnd).getTime() : null
+  const elapsedMs = raceStart ? (raceEndTs || now) - new Date(raceStart).getTime() : null
   if (loading) return <EmptyState message="Loading..." />
 
   return (
@@ -518,6 +521,7 @@ function deriveStatusPub(rec, raceStarted) {
 function AdultTab() {
   const [allRows, setAllRows]       = useState([])
   const [raceStart, setRaceStart]   = useState(null)
+  const [raceEnd,   setRaceEnd]     = useState(null)
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
@@ -531,12 +535,14 @@ function AdultTab() {
   }, [])
 
   async function refresh() {
-    // Fetch race start
-    const { data: evData } = await supabase.from('race_events').select('ts')
-      .eq('race_type', 'adult').eq('event_type', 'start')
-      .order('ts', { ascending: false }).limit(1)
-    const startTs = evData?.[0]?.ts || null
+    // Fetch race start and end
+    const { data: evData } = await supabase.from('race_events').select('event_type, ts')
+      .eq('race_type', 'adult').order('ts', { ascending: false })
+    const startEv = (evData || []).find(e => e.event_type === 'start')
+    const endEv   = (evData || []).find(e => e.event_type === 'end')
+    const startTs = startEv?.ts || null
     setRaceStart(startTs)
+    setRaceEnd(endEv?.ts || null)
 
     // Fetch ALL timing records (not just finished)
     const { data: tData } = await supabase.from('timing_records').select('*').eq('race_type', 'adult')
@@ -581,7 +587,8 @@ function AdultTab() {
     setLastUpdate(new Date())
   }
 
-  const elapsedMs = raceStart ? now - new Date(raceStart).getTime() : null
+  const raceEndTs = raceEnd ? new Date(raceEnd).getTime() : null
+  const elapsedMs = raceStart ? (raceEndTs || now) - new Date(raceStart).getTime() : null
   const indAll  = allRows.filter(r => !r.isTeam)
   const teamAll = allRows.filter(r => r.isTeam)
   const finishedRows = allRows.filter(r => r.status === 'Finished').sort((a,b) => (a.totalMs??Infinity)-(b.totalMs??Infinity))

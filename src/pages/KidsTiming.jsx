@@ -9,6 +9,7 @@ export default function KidsTiming() {
   const [timingRecords, setTimingRecords] = useState({}) // keyed by participant_id
   const [raceStart, setRaceStart] = useState(null) // ISO string
   const [raceEnded, setRaceEnded] = useState(false)
+  const [raceEndTime, setRaceEndTime] = useState(null)
   const [loading, setLoading] = useState(true)
   const [searchVal, setSearchVal] = useState('')
   const [confirm, setConfirm] = useState(null)
@@ -61,6 +62,7 @@ export default function KidsTiming() {
         const startEv = evData.find(e => e.event_type === 'start')
         setRaceStart(startEv ? startEv.ts : null)
         setRaceEnded(true)
+        setRaceEndTime(latest.ts)
       } else if (latest.event_type === 'start') {
         setRaceStart(latest.ts)
         setRaceEnded(false)
@@ -109,10 +111,11 @@ export default function KidsTiming() {
   }
 
   async function endRace() {
+    const ts = new Date().toISOString()
     const { error } = await supabase.from('race_events').insert({
-      race_type: 'kids', event_type: 'end', ts: new Date().toISOString()
+      race_type: 'kids', event_type: 'end', ts
     })
-    if (!error) { setRaceEnded(true); setConfirm(null); focusSearch() }
+    if (!error) { setRaceEnded(true); setRaceEndTime(ts); setConfirm(null); focusSearch() }
   }
 
   async function resetRace() {
@@ -202,7 +205,7 @@ export default function KidsTiming() {
         </div>
         {raceStart && !raceEnded && (
           <div style={{color:'var(--accent)', fontWeight:700, fontFamily:'monospace', fontSize:'1.1rem'}}>
-            {formatDuration(now - new Date(raceStart).getTime())}
+            {formatDuration((raceEnded && raceEndTime ? new Date(raceEndTime) : now) - new Date(raceStart).getTime())}
           </div>
         )}
       </div>

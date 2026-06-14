@@ -19,6 +19,7 @@ function deriveStatus(rec, raceStarted) {
 export default function LiveResultsAdult() {
   const [rows, setRows]           = useState([])
   const [raceStart, setRaceStart] = useState(null)
+  const [raceEnd,   setRaceEnd]   = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [now, setNow] = useState(Date.now())
@@ -31,11 +32,14 @@ export default function LiveResultsAdult() {
   }, [])
 
   async function load() {
-    const { data: evData } = await supabase.from('race_events').select('ts')
-      .eq('race_type', 'adult').eq('event_type', 'start')
-      .order('ts', { ascending: false }).limit(1)
-    const startTs = evData?.[0]?.ts || null
+    const { data: evData } = await supabase.from('race_events').select('event_type, ts')
+      .eq('race_type', 'adult')
+      .order('ts', { ascending: false })
+    const startEv = (evData || []).find(e => e.event_type === 'start')
+    const endEv   = (evData || []).find(e => e.event_type === 'end')
+    const startTs = startEv?.ts || null
     setRaceStart(startTs)
+    setRaceEnd(endEv?.ts || null)
 
     // All timing records — not just finished
     const { data: tData } = await supabase.from('timing_records').select('*').eq('race_type', 'adult')
@@ -95,7 +99,7 @@ export default function LiveResultsAdult() {
     setLastUpdate(new Date())
   }
 
-  const elapsedMs = raceStart ? now - new Date(raceStart).getTime() : null
+  const elapsedMs = raceStart ? (raceEnd ? new Date(raceEnd).getTime() : now) - new Date(raceStart).getTime() : null
 
   const statuses = ['all', ...STATUS_ORDER]
   const displayed = statusFilter === 'all' ? rows : rows.filter(r => r.status === statusFilter)

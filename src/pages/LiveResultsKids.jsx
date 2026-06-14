@@ -5,6 +5,7 @@ import { formatDuration, diffMs } from '../lib/utils'
 export default function LiveResultsKids() {
   const [results, setResults]     = useState([])
   const [raceStart, setRaceStart] = useState(null)
+  const [raceEnd,   setRaceEnd]   = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [now, setNow] = useState(Date.now())
 
@@ -17,11 +18,14 @@ export default function LiveResultsKids() {
 
   async function load() {
     const { data: evData } = await supabase
-      .from('race_events').select('ts')
-      .eq('race_type', 'kids').eq('event_type', 'start')
-      .order('ts', { ascending: false }).limit(1)
-    const startTs = evData?.[0]?.ts || null
+      .from('race_events').select('event_type, ts')
+      .eq('race_type', 'kids')
+      .order('ts', { ascending: false })
+    const startEv = (evData || []).find(e => e.event_type === 'start')
+    const endEv   = (evData || []).find(e => e.event_type === 'end')
+    const startTs = startEv?.ts || null
     setRaceStart(startTs)
+    setRaceEnd(endEv?.ts || null)
 
     const { data: tData } = await supabase.from('timing_records')
       .select('*, participants(*)')
@@ -40,7 +44,7 @@ export default function LiveResultsKids() {
     setLastUpdate(new Date())
   }
 
-  const elapsedMs = raceStart ? now - new Date(raceStart).getTime() : null
+  const elapsedMs = raceStart ? (raceEnd ? new Date(raceEnd).getTime() : now) - new Date(raceStart).getTime() : null
 
   return (
     <div>

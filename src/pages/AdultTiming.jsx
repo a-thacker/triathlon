@@ -22,6 +22,7 @@ export default function AdultTiming() {
   const [timingMap, setTimingMap]       = useState({})   // key: participant_id OR "team:COLOR" -> record
   const [raceStart, setRaceStart]       = useState(null)
   const [raceEnded, setRaceEnded]       = useState(false)
+  const [raceEndTime, setRaceEndTime]   = useState(null)
   const [loading, setLoading]           = useState(true)
   const [searchVal, setSearchVal]       = useState('')
   const [statusFilter, setStatusFilter]  = useState('all')
@@ -78,6 +79,7 @@ export default function AdultTiming() {
         const startEv = evData.find(e => e.event_type === 'start')
         setRaceStart(startEv ? startEv.ts : null)
         setRaceEnded(true)
+        setRaceEndTime(latest.ts)
       } else if (latest.event_type === 'start') {
         setRaceStart(latest.ts)
         setRaceEnded(false)
@@ -240,8 +242,10 @@ export default function AdultTiming() {
   }
 
   async function endRace() {
-    await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'end', ts: new Date().toISOString() })
+    const ts = new Date().toISOString()
+    await supabase.from('race_events').insert({ race_type: 'adult', event_type: 'end', ts })
     setRaceEnded(true)
+    setRaceEndTime(ts)
     setConfirm(null)
     focusSearch()
   }
@@ -337,7 +341,7 @@ export default function AdultTiming() {
         </div>
         {raceStart && !raceEnded && (
           <div style={{ color: 'var(--accent)', fontWeight: 700, fontFamily: 'monospace', fontSize: '1.1rem' }}>
-            {formatDuration(now - new Date(raceStart).getTime())}
+            {formatDuration((raceEnded && raceEndTime ? new Date(raceEndTime) : now) - new Date(raceStart).getTime())}
           </div>
         )}
       </div>
