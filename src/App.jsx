@@ -129,7 +129,6 @@ export default function App() {
 
       {/* Full-screen race clock — no sidebar, no auth, for TV/display use */}
       <Route path="/clock/:raceType" element={<RaceClock />} />
-
       {/* Organizer app — protected */}
       <Route path="/app/*" element={
         <RequireAuth>
