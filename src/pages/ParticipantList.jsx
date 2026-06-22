@@ -87,11 +87,63 @@ export default function ParticipantList() {
 
   const sel = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', padding: '7px 10px', fontSize: '0.82rem', cursor: 'pointer' }
 
+  function exportCSV() {
+    const headers = [
+      'race_number', 'first_name', 'last_name', 'age', 'gender', 'race_type',
+      'registration_date', 'checked_in', 'paid', 'received_swag_bag', 'tshirt_size',
+      'is_team', 'team_color', 'team_role', 'exclude_from_results',
+    ]
+
+    const teamColorLabel = (color) => {
+      if (!color) return ''
+      return TEAM_COLORS.find(c => c.value === color)?.label || color
+    }
+
+    const rows = participants
+      .slice()
+      .sort((a, b) => a.race_number - b.race_number)
+      .map(p => [
+        p.race_number,
+        p.first_name,
+        p.last_name,
+        p.age ?? '',
+        p.gender ?? '',
+        p.race_type,
+        p.registration_date ?? '',
+        p.checked_in ? 'true' : 'false',
+        p.paid ? 'true' : 'false',
+        p.received_swag_bag ? 'true' : 'false',
+        p.tshirt_size ?? '',
+        p.is_team ? 'true' : 'false',
+        teamColorLabel(p.team_color),
+        p.team_role ?? '',
+        p.exclude_from_results ? 'true' : 'false',
+      ].map(v => {
+        const s = String(v)
+        // Wrap in quotes if value contains a comma, newline, or quote
+        return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+      }))
+
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `participants_${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <div className="page-title">Participants</div>
-        <button className="btn btn-primary" onClick={() => navigate('/app/register')}>+ New</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={exportCSV} disabled={participants.length === 0}>
+            Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/app/register')}>+ New</button>
+        </div>
       </div>
       <div className="page-sub">{participants.length} total · {filtered.length} shown</div>
 

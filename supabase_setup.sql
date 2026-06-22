@@ -98,6 +98,9 @@ create table if not exists app_settings (
   id integer primary key default 1,
   kids_results_released boolean not null default false,
   adults_results_released boolean not null default false,
+  -- Which result categories to show on the TV/Roku race clock once released.
+  -- Stored as a jsonb object: { overall: bool, men: bool, women: bool, team: bool, age_group: bool }
+  clock_display_categories jsonb not null default '{"overall":true,"men":true,"women":true,"team":false,"age_group":false}'::jsonb,
   constraint single_row check (id = 1)
 );
 
@@ -107,3 +110,5 @@ insert into app_settings (id) values (1) on conflict do nothing;
 alter table app_settings disable row level security;
 
 -- MIGRATION: if table doesn't exist yet, run the create above.
+-- If it already exists, run this instead:
+-- alter table app_settings add column if not exists clock_display_categories jsonb not null default '{"overall":true,"men":true,"women":true,"team":false,"age_group":false}'::jsonb;

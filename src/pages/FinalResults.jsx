@@ -11,6 +11,51 @@ function Section({ title, children }) {
   )
 }
 
+const DEFAULT_CLOCK_CATEGORIES = { overall: true, men: true, women: true, team: false, age_group: false }
+
+function ClockCategoryControls({ settings, setSettings }) {
+  const [saving, setSaving] = useState(false)
+  const categories = settings.clock_display_categories || DEFAULT_CLOCK_CATEGORIES
+
+  async function toggle(key) {
+    setSaving(true)
+    const next = { ...categories, [key]: !categories[key] }
+    const { error } = await supabase.from('app_settings').update({ clock_display_categories: next }).eq('id', 1)
+    if (!error) setSettings(s => ({ ...s, clock_display_categories: next }))
+    setSaving(false)
+  }
+
+  const OPTIONS = [
+    { key: 'overall',   label: 'Top 3 Overall' },
+    { key: 'men',       label: 'Top 3 Men' },
+    { key: 'women',     label: 'Top 3 Women' },
+    { key: 'team',      label: 'Top 3 Teams' },
+    { key: 'age_group', label: 'Age Group Winners' },
+  ]
+
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div className="card-title">TV Clock — Category Display</div>
+      <p className="text-muted text-sm" style={{ marginTop: -4, marginBottom: 12 }}>
+        Choose which categories appear on the race clock display once results are released. The running clock always shows regardless of these settings.
+      </p>
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+        {OPTIONS.map(opt => (
+          <label key={opt.key} className="checkbox-label" style={{ opacity: saving ? 0.6 : 1 }}>
+            <input
+              type="checkbox"
+              checked={!!categories[opt.key]}
+              disabled={saving}
+              onChange={() => toggle(opt.key)}
+            />
+            {opt.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function IndividualTable({ rows, showSplits = false }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 0 }}>
@@ -162,7 +207,7 @@ export default function FinalResults() {
   const [ind, setInd]       = useState([])
   const [teams, setTeams]   = useState([])
   const [loading, setLoading]   = useState(true)
-  const [settings, setSettings] = useState({ kids_results_released: false, adults_results_released: false })
+  const [settings, setSettings] = useState({ kids_results_released: false, adults_results_released: false, clock_display_categories: DEFAULT_CLOCK_CATEGORIES })
   const [saving, setSaving]     = useState('')
   const [raceStatus, setRaceStatus] = useState({ kids: 'not_started', adult: 'not_started' })
 
@@ -260,6 +305,9 @@ export default function FinalResults() {
 
         </div>
       </div>
+
+      {/* TV Clock category display controls */}
+      <ClockCategoryControls settings={settings} setSettings={setSettings} />
 
       <Section title="Kids Race — Top 3 Overall">
         <IndividualTable rows={kids.slice(0, 3)} />
