@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { teamColorStyle, TEAM_COLORS } from '../lib/utils'
+import { teamColorStyle, TEAM_COLORS, formatDuration, diffMs, calcAdultSplits } from '../lib/utils'
 
 const SORT_OPTIONS = [
   { value: 'race_number_asc',   label: 'Number (Low to High)' },
@@ -87,28 +87,117 @@ export default function ParticipantList() {
 
   const sel = { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', padding: '7px 10px', fontSize: '0.82rem', cursor: 'pointer' }
 
-  function exportCSV() {
+  async function exportResultsCSV() {
+    // Fetch race start times for both race types
+    const { data: evData } = await supabase.from('race_events')
+      .select('race_type, event_type, ts')
+      .eq('event_type', 'start')
+      .order('ts', { ascending: false })
+    const raceStarts = {}
+    ;(evData || []).forEach(e => { if (!raceStarts[e.race_type]) raceStarts[e.race_type] = e.ts })
+
+    // Fetch all timing records
+    const { data: tData } = await supabase.from('timing_records').select('*')
+    const timingByParticipant = {}
+    const timingByTeam = {}
+    ;(tData || []).forEach(r => {
+      if (r.participant_id) timingByParticipant[r.participant_id] = r
+      if (r.team_color)     timingByTeam[`${r.team_color}:${r.race_type}`] = r
+    })
+
+    const teamColorLabel = (color) =>
+      color ? (TEAM_COLORS.find(c => c.value === color)?.label || color) : ''
+
+    const fmt = (ms) => ms != null ? formatDuration(ms) : ''
+
+    const headers = [
+      'race_number', 'first_name', 'last_name', 'age', 'gender', 'race_type',
+      'team', 'team_color',
+      // Kids only
+      'finish_time',
+      // Adult splits
+      'swim', 't1', 'bike', 't2', 'run', 'total',
+      'dnf',
+    ]
+
+    const rows = participants
+      .slice()
+      .sort((a, b) => {
+        if (a.race_type !== b.race_type) return a.race_type.localeCompare(b.race_type)
+        return a.race_number - b.race_number
+      })
+      .map(p => {
+        const raceStart = raceStarts[p.race_type] || null
+        let rec = null
+        if (p.is_team && p.team_color) {
+          rec = timingByTeam[`${p.team_color}:${p.race_type}`] || null
+        } else {
+          rec = timingByParticipant[p.id] || null
+        }
+
+        let swim = '', t1 = '', bike = '', t2 = '', run = '', total = '', finish = '', dnf = ''
+
+        if (rec) {
+          dnf = rec.dnf ? 'true' : 'false'
+          if (p.race_type === 'adult') {
+            const splits = calcAdultSplits(rec, raceStart)
+            swim  = fmt(splits.swimMs)
+            t1    = fmt(splits.t1Ms)
+            bike  = fmt(splits.bikeMs)
+            t2    = fmt(splits.t2Ms)
+            run   = fmt(splits.runMs)
+            total = fmt(splits.totalMs)
+          } else {
+            // Kids: just finish time
+            finish = fmt(diffMs(raceStart, rec.finish_time))
+            total  = finish
+          }
+        }
+
+        return [
+          p.race_number,
+          p.first_name,
+          p.last_name,
+          p.age ?? '',
+          p.gender ?? '',
+          p.race_type === 'adult' ? 'Adult' : 'Kids',
+          p.is_team ? 'Yes' : 'No',
+          teamColorLabel(p.team_color),
+          finish,
+          swim, t1, bike, t2, run, total,
+          dnf,
+        ].map(v => {
+          const s = String(v)
+          return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+        })
+      })
+
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `results_${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportRosterCSV() {
+    const teamColorLabel = (color) =>
+      color ? (TEAM_COLORS.find(c => c.value === color)?.label || color) : ''
+
     const headers = [
       'race_number', 'first_name', 'last_name', 'age', 'gender', 'race_type',
       'registration_date', 'checked_in', 'paid', 'received_swag_bag', 'tshirt_size',
       'is_team', 'team_color', 'team_role', 'exclude_from_results',
     ]
 
-    const teamColorLabel = (color) => {
-      if (!color) return ''
-      return TEAM_COLORS.find(c => c.value === color)?.label || color
-    }
-
     const rows = participants
       .slice()
       .sort((a, b) => a.race_number - b.race_number)
       .map(p => [
-        p.race_number,
-        p.first_name,
-        p.last_name,
-        p.age ?? '',
-        p.gender ?? '',
-        p.race_type,
+        p.race_number, p.first_name, p.last_name,
+        p.age ?? '', p.gender ?? '', p.race_type,
         p.registration_date ?? '',
         p.checked_in ? 'true' : 'false',
         p.paid ? 'true' : 'false',
@@ -120,7 +209,6 @@ export default function ParticipantList() {
         p.exclude_from_results ? 'true' : 'false',
       ].map(v => {
         const s = String(v)
-        // Wrap in quotes if value contains a comma, newline, or quote
         return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
       }))
 
@@ -129,7 +217,7 @@ export default function ParticipantList() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `participants_${new Date().toISOString().slice(0, 10)}.csv`
+    link.download = `roster_${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -139,8 +227,11 @@ export default function ParticipantList() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <div className="page-title">Participants</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-ghost" onClick={exportCSV} disabled={participants.length === 0}>
-            Export CSV
+          <button className="btn btn-ghost" onClick={exportRosterCSV} disabled={participants.length === 0} title="Registration data only">
+            Export Roster
+          </button>
+          <button className="btn btn-ghost" onClick={exportResultsCSV} disabled={participants.length === 0} title="Includes all race times and splits">
+            Export Results
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/app/register')}>+ New</button>
         </div>
